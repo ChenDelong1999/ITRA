@@ -12,15 +12,19 @@ try:
 except ImportError:
     wandb = None
 
-def evaluate(student, teacher, epoch, preprocess, args, tb_writer=None):
+def evaluate(student, teacher, epoch, preprocess, args, tb_writer=None, fast_evaluation=True):
     if args.distributed and not is_master(args):
         return
     logging.info( f"Starting evaluation of [{args.name}] at epoch {epoch}")
 
-    #linear_eval_datasets = ['imagenet', 'cifar10', 'cifar100', 'stl10']
-    linear_eval_datasets = ['cifar100']
-    #zeroshot_datasets = ['imagenet', 'cifar10', 'cifar100', 'stl10', 'birdsnap','country211', 'flowers102', 'gtsrb', 'ucf101','stanford_cars']
-    zeroshot_datasets = ['cifar100']
+    if fast_evaluation:
+        linear_eval_datasets = ['cifar100']
+        zeroshot_datasets = ['cifar100']
+        args.evaluation_workers = 0
+    else:
+        linear_eval_datasets = ['imagenet', 'cifar10', 'cifar100', 'stl10']
+        zeroshot_datasets = ['imagenet', 'cifar10', 'cifar100', 'stl10', 'birdsnap','country211', 'flowers102', 'gtsrb', 'ucf101','stanford_cars']
+        args.evaluation_workers = 8
     
     student.eval()
     all_metrics = {}

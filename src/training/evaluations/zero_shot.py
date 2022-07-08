@@ -16,7 +16,7 @@ from training.data import ImageNet_nori
 from open_clip import tokenize as clip_tokenizer
 
 
-def zero_shot_classifier(teacher, classnames, templates, args):
+def zero_shot_classifier(teacher, text_projection_head, classnames, templates):
     with torch.no_grad():
         zeroshot_weights = []
         for classname in classnames:
@@ -26,6 +26,7 @@ def zero_shot_classifier(teacher, classnames, templates, args):
                 convert_to_tensor=True, 
                 show_progress_bar=False
                 )
+            class_embeddings = text_projection_head(class_embeddings)
             class_embeddings = class_embeddings.mean(dim=0)
             class_embedding = F.normalize(class_embeddings, dim=-1)
             class_embedding /= class_embedding.norm()
@@ -49,9 +50,11 @@ def run(student, classifier, dataloader, args):
             images = images.to(args.device)
 
             if args.distributed and not args.horovod:
-                image_features = student.module(images, projection=True)
+                image_features = student.module(images)
+                image_features = student.module.image_projection_head(image_features)
             else:
-                image_features = student(images, projection=True)
+                image_features = student(images)
+                image_features = student.image_projection_head(image_features)
 
             image_features = F.normalize(image_features, dim=-1)
             image_features = image_features.detach().cpu()
@@ -122,7 +125,7 @@ def zero_shot_eval(student, teacher, zeroshot_dataset, epoch, preprocess, args):
 
         dataset = torchvision.datasets.ImageFolder(data_path, transform=preprocess)
     
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, num_workers=0)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, num_workers=args.evaluation_workers)
 
 
     logging.info(f'Calculating text classifier for {zeroshot_dataset}')
@@ -136,7 +139,11 @@ def zero_shot_eval(student, teacher, zeroshot_dataset, epoch, preprocess, args):
         empty_indexs = [46, 66, 123, 299, 302, 351, 403, 436, 465]
         for empty_index in empty_indexs[::-1]:
             del classnames[empty_index]
-    classifier = zero_shot_classifier(teacher, classnames, prompt_templates, args)
+    if args.add_teacher_projection_head:
+        text_projection_head = student.module.text_projection_head if args.distributed else student.text_projection_head
+    else:
+        text_projection_head = torch.nn.Identity()
+    classifier = zero_shot_classifier(teacher, text_projection_head, classnames, prompt_templates)
 
     logging.info(f'Calculating image features for {zeroshot_dataset}')
     results = {}

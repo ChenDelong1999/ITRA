@@ -96,31 +96,31 @@ def show_samples(dataset, label, file_name, sample_per_class=16, max_rows=16):
 
 if __name__=='__main__':
     dataset = CsvDataset()
+    for model in ['average_word_embeddings_glove.6B.300d', 'all-MiniLM-L6-v2', 'all-mpnet-base-v2']:
+        embedder = SentenceTransformer(model)
 
-    embedder = SentenceTransformer('average_word_embeddings_komninos')
+        # Corpus with example sentences
+        corpus = dataset.captions[:2500000]
 
-    # Corpus with example sentences
-    corpus = dataset.captions[:200000]
+        corpus_embeddings = embedder.encode(corpus, show_progress_bar=True, batch_size=512)
 
-    corpus_embeddings = embedder.encode(corpus, show_progress_bar=True, batch_size=512)
+        # Perform kmean clustering
+        num_clusters = 10000
+        cluster_assignment = kmeans(corpus_embeddings, num_clusters)
 
-    # Perform kmean clustering
-    num_clusters = 20000
-    cluster_assignment = kmeans(corpus_embeddings, num_clusters)
+        #clustering_model = KMeans(n_clusters=num_clusters)
+        #clustering_model.fit(corpus_embeddings)
+        #cluster_assignment = clustering_model.labels_
 
-    #clustering_model = KMeans(n_clusters=num_clusters)
-    #clustering_model.fit(corpus_embeddings)
-    #cluster_assignment = clustering_model.labels_
+        clustered_sentences = [[] for i in range(num_clusters)]
+        clustered_ids = [[] for i in range(num_clusters)]
+        for sentence_id, cluster_id in enumerate(cluster_assignment):
+            clustered_sentences[cluster_id].append(corpus[sentence_id])
+            clustered_ids[cluster_id].append(sentence_id)
 
-    clustered_sentences = [[] for i in range(num_clusters)]
-    clustered_ids = [[] for i in range(num_clusters)]
-    for sentence_id, cluster_id in enumerate(cluster_assignment):
-        clustered_sentences[cluster_id].append(corpus[sentence_id])
-        clustered_ids[cluster_id].append(sentence_id)
-
-    show_samples(dataset, cluster_assignment, 'vis_cluster_[average_word_embeddings_komninos].png', sample_per_class=10, max_rows=64)
+        show_samples(dataset, cluster_assignment, f'vis_cluster_[{model}]', sample_per_class=10, max_rows=64)
     
-    for i, cluster in enumerate(clustered_sentences):
-        print("Cluster ", i+1)
-        print(cluster)
-        print("")
+    # for i, cluster in enumerate(clustered_sentences):
+    #     print("Cluster ", i+1)
+    #     print(cluster)
+    #     print("")

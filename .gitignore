@@ -4,6 +4,7 @@ models/
 features/
 results/
 scripts/
+weights/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -149,3 +150,4 @@ core.*
 
 # Allow
 !src/evaluation/misc/results_dbs/*
+data/stsbenchmark.tsv.gz

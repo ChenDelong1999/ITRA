@@ -30,6 +30,45 @@ torchrun --nproc_per_node 8 -m training.main \
     --lr 5e-4 --warmup 2000 --wd 0.5 --max-grad-norm 10 \
     --report-to tensorboard --logs logs --copy-codebase --name 'tea[average_word_embeddings_glove.6B.300d]_stu[RN50]_[MSE]_bs1024_lr5e-4_16-epochs(CC250w)'
 ```
+See https://www.sbert.net/docs/pretrained_models.html for avaliable pretrainined language models
+
+
+# Load Models from Torchvision
+```python
+[
+    'alexnet', 
+    'vgg11', 'vgg11_bn', 'vgg13', 'vgg13_bn', 'vgg16', 'vgg16_bn', 'vgg19_bn', 'vgg19', 
+    'squeezenet1_0', 'squeezenet1_1', 
+    'inception_v3', 
+    'densenet121', 'densenet169', 'densenet201', 'densenet161', 
+    'googlenet', 
+    'resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152', 'resnext50_32x4d', 'resnext101_32x8d', 'wide_resnet50_2', 'wide_resnet101_2',
+    'regnet_y_400mf', 'regnet_y_800mf', 'regnet_y_1_6gf', 'regnet_y_3_2gf', 'regnet_y_8gf', 'regnet_y_16gf', 'regnet_y_32gf', 'regnet_y_128gf', 'regnet_x_400mf','regnet_x_800mf', 'regnet_x_1_6gf', 'regnet_x_3_2gf', 'regnet_x_8gf', 'regnet_x_16gf', 'regnet_x_32gf', 
+    'convnext_tiny', 'convnext_small', 'convnext_base', 'convnext_large', 
+    'vit_b_16', 'vit_b_32', 'vit_l_16', 'vit_l_32'
+]
+```
+
+
+# Pretrained SSL Checkpoints
+
+Teacher Arch. | SSL Method |               Teacher SSL-epochs              | Link |
+---------|---------|----------------------------------|-------|
+ResNet-50  |  MoCo-V1 | 200 | [URL](https://seed.blob.core.windows.net/data/SEED/moco_v1_200ep_pretrain.pth.tar?sv=2020-08-04&st=2021-11-03T22%3A07%3A11Z&se=2031-11-04T22%3A07%3A00Z&sr=b&sp=r&sig=4pVrNIbozl3VXhdUltFCFfd5AiIcHHuwv%2FijbCXWIqE%3D)
+ResNet-50  |  SimCLR |    200    |          [URL](https://seed.blob.core.windows.net/data/SEED/simclr_200.pth?sv=2020-08-04&st=2021-11-03T22%3A06%3A55Z&se=2031-11-04T22%3A06%3A00Z&sr=b&sp=r&sig=n6wR%2F22ddPpDpIP2cpw9wJ8Ll4CCpCMaLfRQCgMV5Zc%3D)
+ResNet-50  |  MoCo-V2 |    200    |          [URL](https://seed.blob.core.windows.net/data/SEED/jianfw_mocov2_ResNet50_epoch200.pth?sv=2020-08-04&st=2021-11-03T22%3A06%3A28Z&se=2031-11-04T22%3A06%3A00Z&sr=b&sp=r&sig=Ql6sep8UFLDbWYugxaK%2FoUmLTCJhPCpJZfAywS4cu8Q%3D)
+ResNet-50  |  MoCo-V2 |    800    |          [URL](https://seed.blob.core.windows.net/data/SEED/moco_v2_800ep_pretrain.pth.tar?sv=2020-08-04&st=2021-11-03T22%3A06%3A03Z&se=2031-11-04T22%3A06%3A00Z&sr=b&sp=r&sig=%2Bu9r3n%2BOuYF5snOL1nqJ4D%2BaEnJbBi1p0IRfhRY0InA%3D)
+ResNet-50  |  SWAV |    800    |          [URL](https://seed.blob.core.windows.net/data/SEED/swav_800ep_pretrain.pth.tar?sv=2020-08-04&st=2021-11-03T22%3A05%3A34Z&se=2031-11-04T22%3A05%3A00Z&sr=b&sp=r&sig=gMj1imj4AWNsfz2VQC5ZWQUKKoQo81LHEN5%2FduV9Wrw%3D)
+ResNet-101  |  MoCo-V2 |    200    |          [URL](https://seed.blob.core.windows.net/data/SEED/res101-moco-v2-checkpoint_0199.pth.tar?sv=2020-08-04&st=2021-11-03T22%3A05%3A15Z&se=2031-11-04T22%3A05%3A00Z&sr=b&sp=r&sig=QdAtnGB%2B%2Bh9YQBs%2BDlURv42TcoWWIpNDrfHNohadWPU%3D)
+ResNet-152  |  MoCo-V2 |    200    |          [URL](https://seed.blob.core.windows.net/data/SEED/200-resnet152-moco-v2-checkpoint_0199.pth.tar?sv=2020-08-04&st=2021-11-03T22%3A04%3A55Z&se=2031-11-04T22%3A04%3A00Z&sr=b&sp=r&sig=CLM0EN7m2yjuXOk1WhdqTH18Nh%2Btj4zfDgHZj9c6iNQ%3D)
+ResNet-152  |  MoCo-V2 |    800    |          [URL](https://seed.blob.core.windows.net/data/SEED/800-resnet152-moco-v2-checkpoint_0799.pth.tar?sv=2020-08-04&st=2021-11-03T22%3A04%3A37Z&se=2031-11-04T22%3A04%3A00Z&sr=b&sp=r&sig=Xg1Pf50T9EC9g7b4FbQxt3uC8%2BKuyKZQRF8lt3YbzVE%3D)
+ResNet-50X2  |  SWAV |    400    |          [URL](https://seed.blob.core.windows.net/data/SEED/swav_RN50w2_400ep_pretrain.pth.tar?sv=2020-08-04&st=2021-11-03T22%3A04%3A07Z&se=2031-11-04T22%3A04%3A00Z&sr=b&sp=r&sig=AuN3iN6vGZ8H1sLdaCVGiz5LfZIBdRzelehFF8xK0JA%3D)
+ResNet-50X4  |  SWAV |    400    |          [URL](https://seed.blob.core.windows.net/data/SEED/swav_RN50w4_400ep_pretrain.pth.tar?sv=2020-08-04&st=2021-11-03T22%3A03%3A49Z&se=2031-11-04T22%3A03%3A00Z&sr=b&sp=r&sig=ywgTDEKuyvN0hjQdq7n3qJVbHJVefs%2FvBNvSgLJk%2BHg%3D)
+ResNet-50X5  |  SWAV |    400    |          [URL](https://seed.blob.core.windows.net/data/SEED/swav_RN50w5_400ep_pretrain.pth.tar?sv=2020-08-04&st=2021-11-03T22%3A02%3A37Z&se=2031-11-04T22%3A02%3A00Z&sr=b&sp=r&sig=PVr%2FkyUGN0Fl%2F29z6EZWQvynGJDlP4peF36AcgnVsvg%3D)
+
+
+
+
 
 
 # Requirements
@@ -56,14 +95,12 @@ torchrun --nproc_per_node 8 -m training.main \
 - Install additional dependencies:
     ```bash
     conda install pandas scikit-learn faiss-gpu ftfy tqdm matplotlib pycocotools
-    pip install pytorch-transformers
     conda install -c huggingface transformers # hugging face
     conda install wandb # if you want to use wandb for better logging
     # TODO: remove nori dependency
     pip install nori2
     ```
-    **Note**: This codebase integrate [pytorch-transformers](https://pypi.org/project/pytorch-transformers) to initalize the text tower with large pretrained language model (experimental).
-
+    
 
 ## 2. Prepare Pretraining Data
 This codebase reads a `CSV` file (separated by `\t`) with two columns: a path to an image ("filepath" by default), and a text caption ("title" by default).

@@ -14,6 +14,56 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    # Knowledge Distillation Configurations
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    
+    parser.add_argument("--w-projection-AE", type=float, default=100., help="Loss weight.")
+    parser.add_argument("--w-rkd-d", type=float, default=0.5, help="Loss weight.")
+    parser.add_argument("--w-rkd-a", type=float, default=1.0, help="Loss weight.")
+
+    parser.add_argument(
+        "--distiller",
+        type=str,
+        default='SimReg',
+        help="SimReg, RKD, CompRess, CompRess-1q, CLIP",
+    )
+    parser.add_argument(
+        "--freeze-student-backbone",
+        action="store_true",
+        default=False,
+        help="train student projection head only",
+    ) 
+    parser.add_argument(
+        "--add-teacher-projection-head",
+        action="store_true",
+        default=False,
+        help="rt",
+    ) 
+    parser.add_argument(
+        "--add-teacher-projection-AE",
+        action="store_true",
+        default=False,
+        help="rt",
+    ) 
+    parser.add_argument(
+        "--pretrained",
+        default='',
+        type=str,
+        help="Use a pretrained CLIP model weights with the specified tag or file path.",
+    )
+    parser.add_argument(
+        "--pretrained-image",
+        default='',
+        type=str,
+        help="Load imagenet pretrained weights for image tower backbone if available.",
+    )
+    parser.add_argument(
+        "--pretrained-text",
+        default=None,
+        type=str,
+        help="Load pretrained language model as text tower. See https://www.sbert.net/docs/pretrained_models.html for avaliable models",
+    )
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Data and Episodic training
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     parser.add_argument(
@@ -174,53 +224,8 @@ def parse_args():
         type=str,
         help="path to latest checkpoint (default: none)",
     )
-    parser.add_argument(
-        "--pretrained",
-        default='',
-        type=str,
-        help="Use a pretrained CLIP model weights with the specified tag or file path.",
-    )
-    parser.add_argument(
-        "--pretrained-image",
-        default=False,
-        action='store_true',
-        help="Load imagenet pretrained weights for image tower backbone if available.",
-    )
-    parser.add_argument(
-        "--pretrained-text",
-        default=None,
-        type=str,
-        help="Load pretrained language model as text tower. See https://www.sbert.net/docs/pretrained_models.html for avaliable models",
-    )
     
 
-    parser.add_argument("--w-clip", type=float, default=1., help="Loss weight.")
-    parser.add_argument("--w-proto", type=float, default=0., help="Loss weight.")
-    parser.add_argument("--w-proto-external", type=float, default=0., help="Loss weight.")
-    parser.add_argument(
-        "--infonce-warmup-epoch",
-        default=0,
-        type=int,
-        help="InfoNCE-only warmup.",
-    )
-    parser.add_argument(
-        "--lit-start-epoch",
-        default=-1,
-        type=int,
-        help="Enable ProtoCLIP asymetric learning rate scheduler. Leave it as negative to skip LiT.",
-    )
-    parser.add_argument(
-        "--text-start-epoch",
-        default=0,
-        type=int,
-        help="Freeze text encoder at the begining of training.",
-    )
-    parser.add_argument(
-        "--text-end-epoch",
-        default=-1,
-        type=int,
-        help="TODO",
-    )
     parser.add_argument(
         "--report-to",
         default='',
@@ -318,6 +323,11 @@ def parse_args():
         type=str,
         default="RN50",
         help="Name of the vision backbone to use.",
+    )
+    parser.add_argument(
+        "--open-clip-model",
+        default=False,
+        action='store_true',
     )
     parser.add_argument(
         "--embed-dim",

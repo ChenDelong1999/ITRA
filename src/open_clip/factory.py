@@ -77,7 +77,7 @@ def create_model(
             model = model.float()
     else:
         if model_name in _MODEL_CONFIGS:
-            logging.info(f'Loading {model_name} model config.')
+            logging.info(f'[OpenCLIP]: Loading {model_name} model config.')
             model_cfg = deepcopy(_MODEL_CONFIGS[model_name])
         else:
             logging.error(f'Model config for {model_name} not found; available models {list_models()}.')
@@ -87,12 +87,14 @@ def create_model(
             # override for use of QuickGELU on non-OpenAI transformer models
             model_cfg["quick_gelu"] = True
 
-        if pretrained_image:
-            if 'timm_model_name' in model_cfg.get('vision_cfg', {}):
-                # pretrained weight loading for timm models set via vision_cfg
-                model_cfg['vision_cfg']['timm_model_pretrained'] = True
-            else:
-                assert False, 'pretrained image towers currently only supported for timm models'
+        # args.pretrained_image will be used for specify visual teacher
+        # if pretrained_image:
+        #     pass
+        #     if 'timm_model_name' in model_cfg.get('vision_cfg', {}):
+        #         # pretrained weight loading for timm models set via vision_cfg
+        #         model_cfg['vision_cfg']['timm_model_pretrained'] = True
+        #     else:
+        #         assert False, 'pretrained image towers currently only supported for timm models'
         model_cfg['args'] = args
         model = CLIP(**model_cfg)
         
@@ -138,6 +140,14 @@ def create_model_and_transforms(
     preprocess_train = image_transform(model.visual.image_size, is_train=True, augmentation=args.augmentation)
     preprocess_val = image_transform(model.visual.image_size, is_train=False)
     return model, preprocess_train, preprocess_val
+
+def create_transforms(
+        image_size,
+        args=None
+):
+    preprocess_train = image_transform(image_size, is_train=True, augmentation=args.augmentation)
+    preprocess_val = image_transform(image_size, is_train=False)
+    return preprocess_train, preprocess_val
 
 
 def list_models():

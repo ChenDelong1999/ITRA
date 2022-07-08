@@ -123,13 +123,13 @@ def get_features(model, dataset, args):
     all_features = []
     all_labels = []
     with torch.no_grad():
-        for images, labels in tqdm(DataLoader(dataset, batch_size=args.batch_size, num_workers=4)):
+        for images, labels in tqdm(DataLoader(dataset, batch_size=args.batch_size, num_workers=args.evaluation_workers)):
             images = images.to(args.device)
 
             if args.distributed and not args.horovod:
-                image_features = model.module(images, projection=False)
+                image_features = model.module(images)
             else:
-                image_features = model(images, projection=False)
+                image_features = model(images)
 
             all_features.append(image_features.cpu())
             all_labels.append(labels.cpu())

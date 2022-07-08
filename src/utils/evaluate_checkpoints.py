@@ -5,26 +5,29 @@ import torch
 from training.params import parse_args
 import argparse
 from training.evaluations.evaluation import evaluate
+from training.projection import add_projection_head
 from open_clip import create_model_and_transforms
 import logging
 import matplotlib.pyplot as plt
+from sentence_transformers import SentenceTransformer
 #from openTSNE import TSNE
-from training.pretrained_transformers import get_pretrained_text_encoder_and_tokenizer
+from training.visual_model import get_visual_model_and_preprocess
 
+# to disable warning "huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks..."
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 logging.basicConfig(format='%(asctime)s: %(message)s', level=logging.INFO)
 
-def evaluate_checkpoint(checkpoint_path, epoch):
+def evaluate_checkpoint(checkpoint_path, epoch, args):
     # load model
     
     logging.info(f'Loading pretrained text trasformer teacher: {args.pretrained_text}.')
-    teacher, tokenizer, args.pretrained_text_feature_dim = get_pretrained_text_encoder_and_tokenizer(args.pretrained_text)
-    
-    CLIP_model, preprocess_train, preprocess_val = create_model_and_transforms(
-        args.model,
-        args=args
-    )
-    student = CLIP_model.visual 
+     
+    student, preprocess_train, preprocess_val = get_visual_model_and_preprocess(args)   
+    student = add_projection_head(student, student.output_dim, args)
+
+    teacher = SentenceTransformer(args.pretrained_text)
+    teacher.to(device=args.device)
 
     checkpoint = torch.load(checkpoint_path, map_location=device)
     sd = checkpoint["state_dict"]
@@ -36,7 +39,7 @@ def evaluate_checkpoint(checkpoint_path, epoch):
     student = student.to(device)
     teacher = teacher.to(device)
     
-    metrics = evaluate(student, teacher, epoch, preprocess_val, tokenizer, args, tb_writer=None)    
+    metrics = evaluate(student, teacher, epoch, preprocess_val, args, tb_writer=None, fast_evaluation=False)    
     return metrics
 
 def load_params(params_file, args):
@@ -97,7 +100,7 @@ if __name__ == '__main__':
                     epoch = int(checkpoint.split('_')[1][:-3])
                     checkpoint_path = os.path.join(checkpoint_dir, checkpoint)
 
-                    metrics = evaluate_checkpoint(checkpoint_path=checkpoint_path, epoch=epoch)
+                    metrics = evaluate_checkpoint(checkpoint_path=checkpoint_path, epoch=epoch, args=args)
                     metrics['epoch'] = epoch
 
                     for key in metrics.keys():
@@ -115,9 +118,12 @@ if __name__ == '__main__':
         checkpoint = f'epoch_{single_eval}.pt'
         logging.info(f'evaluate single checkpoint: {checkpoint}')
         checkpoint_path = os.path.join(checkpoint_dir, checkpoint)
-        epoch = int(checkpoint.split('_')[1][:-3])
+        if single_eval=='latest':
+            epoch = -1
+        else:
+            epoch = int(checkpoint.split('_')[1][:-3])
         
-        metrics = evaluate_checkpoint(checkpoint_path=checkpoint_path, epoch=epoch)
+        metrics = evaluate_checkpoint(checkpoint_path=checkpoint_path, epoch=epoch, args=args)
         metrics['epoch'] = epoch
         for key in metrics.keys():
             metrics[key] = [metrics[key]]

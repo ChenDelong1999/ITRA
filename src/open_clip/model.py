@@ -180,15 +180,13 @@ class ModifiedResNet(nn.Module):
         x = self.avgpool(x)
         return x
 
-    def forward(self, x, projection=False):
+    def forward(self, x):
         x = self.stem(x)
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
         x = self.layer4(x)
         x = self.attnpool(x)
-        if projection:
-            x = self.image_projection_head(x)
 
         return x
 
@@ -408,22 +406,22 @@ class CLIP(nn.Module):
 
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
         
-        if args is not None and args.add_projection_head:
-            self.add_projection_head = True
-            if args.projection_n_layers==0:
-                self.visual.image_projection_head = nn.Sequential(nn.Linear(embed_dim, args.projection_dim))
-            else:
-                layers = [
-                    nn.Linear(embed_dim, args.projection_hidden_dim),
-                    nn.BatchNorm1d(args.projection_hidden_dim),nn.ReLU(inplace=True)]
-                for i in range(args.projection_n_layers-1):
-                    layers.extend([
-                        nn.Linear(args.projection_hidden_dim, args.projection_hidden_dim),
-                        nn.BatchNorm1d(args.projection_hidden_dim), nn.ReLU(inplace=True)])
-                layers.append(nn.Linear(args.projection_hidden_dim, args.projection_dim))
-                self.visual.image_projection_head = nn.Sequential(*layers)
-        else:
-            self.add_projection_head = False
+        # if args is not None and args.add_projection_head:
+        #     self.add_projection_head = True
+        #     if args.projection_n_layers==0:
+        #         self.visual.image_projection_head = nn.Sequential(nn.Linear(embed_dim, args.projection_dim))
+        #     else:
+        #         layers = [
+        #             nn.Linear(embed_dim, args.projection_hidden_dim),
+        #             nn.BatchNorm1d(args.projection_hidden_dim),nn.ReLU(inplace=True)]
+        #         for i in range(args.projection_n_layers-1):
+        #             layers.extend([
+        #                 nn.Linear(args.projection_hidden_dim, args.projection_hidden_dim),
+        #                 nn.BatchNorm1d(args.projection_hidden_dim), nn.ReLU(inplace=True)])
+        #         layers.append(nn.Linear(args.projection_hidden_dim, args.projection_dim))
+        #         self.visual.image_projection_head = nn.Sequential(*layers)
+        # else:
+        self.add_projection_head = False
 
         self.init_parameters()
 

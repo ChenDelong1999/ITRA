@@ -20,33 +20,11 @@ from training.loss import gather_features, ClipLoss, ProtoLoss
 from .distributed import is_master, get_gathered_item
 import torch.distributed as dist
 from training.evaluations.analyze_features import get_modality_gap
+from utils.training_utils import AverageMeter, unwrap_model
 
-class AverageMeter(object):
-    """Computes and stores the average and current value"""
-    def __init__(self):
-        self.reset()
+MSE = nn.MSELoss()
 
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-
-
-def unwrap_model(model):
-    if hasattr(model, 'module'):
-        return model.module
-    else:
-        return model
-
-
-def train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler, clustering, args, tb_writer):
+def train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler, distiller, args, tb_writer):
     device = torch.device(args.device) 
     ZERO = torch.zeros(1).to(args.device)
     
@@ -55,16 +33,6 @@ def train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler,
     student.train()
     teacher.eval()
     
-    clustering.img_centroids = clustering.img_centroids.cuda()
-    clustering.text_centroids = clustering.text_centroids.cuda()
-    clustering.external_centroids = clustering.external_centroids.cuda()
-    if args.PBT:
-        clustering.img_centroids_translated_from_text_prototypes = clustering.img_centroids_translated_from_text_prototypes.cuda()
-        clustering.text_centroids_translated_from_image_prototypes = clustering.text_centroids_translated_from_image_prototypes.cuda()
-        clustering.img_centroids_translated_from_external_prototypes = clustering.img_centroids_translated_from_external_prototypes.cuda()
-        clustering.text_centroids_translated_from_external_prototypes = clustering.text_centroids_translated_from_external_prototypes.cuda()
-
-
     dataloader, sampler = data['train'].dataloader, data['train'].sampler
     if args.distributed and sampler is not None:
         sampler.set_epoch(epoch)
@@ -74,6 +42,10 @@ def train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler,
     batch_time_m = AverageMeter()
     data_time_m = AverageMeter()
     end = time.time()
+    
+    if is_master(args):
+        logging.info(f'Using [{args.distiller}] distiller')
+    
     for i, batch in enumerate(dataloader):
         step = num_batches_per_epoch * epoch + i
         scheduler(step)
@@ -82,31 +54,53 @@ def train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler,
             continue
         all_index = get_gathered_item(index.cuda(), args)
         images = images.to(device=device, non_blocking=True)
-        #img_labels = clustering.img_labels[all_index].to(device=device, non_blocking=True)
-        #text_labels = clustering.text_labels[all_index].to(device=device, non_blocking=True)
-        #external_labels = clustering.external_labels[all_index].to(device=device, non_blocking=True)
-
         data_time_m.update(time.time() - end)
         optimizer.zero_grad()
 
+        total_loss = 0
         with autocast():
-            # L2 distillation loss
-            
-            image_features = student(images, projection=True)
+            # Text Teacher
             with torch.no_grad():
-                text_features = teacher.encode(
+                raw_text_features = teacher.encode(
                     texts,
                     convert_to_tensor=True, 
                     show_progress_bar=False
-                    )
+                    ).detach()
+            if args.add_teacher_projection_head:
+                if args.distributed:
+                    text_features = student.module.text_projection_head(raw_text_features)
+                    if args.add_teacher_projection_AE:
+                        reconstructed_text_features = student.module.text_decoder(text_features)
+                        loss_projection_AE = MSE(reconstructed_text_features, raw_text_features)
+                        total_loss += args.w_projection_AE * loss_projection_AE
+                else:
+                    text_features = student.text_projection_head(raw_text_features)
+                    if args.add_teacher_projection_AE:
+                        reconstructed_text_features = student.text_decoder(text_features)
+                        loss_projection_AE = MSE(reconstructed_text_features, raw_text_features)
+                        total_loss += args.w_projection_AE * loss_projection_AE
+            else:
+                text_features = raw_text_features
+
+            # Image Student
+            if args.freeze_student_backbone:
+                with torch.no_grad():
+                    raw_image_features = student(images).detach()
+            else:
+                raw_image_features = student(images)
+                
+            if args.distributed:
+                image_features = student.module.image_projection_head(raw_image_features)
+            else:
+                image_features = student.image_projection_head(raw_image_features)
 
             if args.distributed:
                 all_image_features, all_text_features = gather_features(image_features, text_features,
                     args.local_loss, args.gather_with_grad, args.rank, args.world_size, args.horovod)
             else:
                 all_image_features, all_text_features = image_features, text_features
-
-            total_loss = nn.MSELoss()(all_image_features, all_text_features)
+            
+            total_loss += distiller(all_text_features, all_image_features)
 
         if scaler is not None:
             scaler.scale(total_loss).backward()
@@ -145,19 +139,24 @@ def train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler,
             )
             
             # Save train loss / etc. Using non avg meter values as loggers have their own smoothing
+            feature_std_image = torch.std(F.normalize(all_image_features, dim=1), dim=0).mean().item()
+            feature_std_text = torch.std(F.normalize(all_text_features, dim=1), dim=0).mean().item()
             log_data = {
                 "total_loss": total_loss.item(),
                 "learning_rate": optimizer.param_groups[0]["lr"],
                 "gradient-norm": norm,
-                "feature_std_image": torch.std(image_features, dim=0).mean().item(),
-                "feature_std_text": torch.std(text_features, dim=0).mean().item(),
-                "feature_modality_gap": get_modality_gap(image_features, text_features),
+                "feature_std_ratio": feature_std_image/feature_std_text,
+                "feature_std_image": feature_std_image,
+                "feature_std_text": feature_std_text,
+                #"feature_modality_gap": get_modality_gap(image_features, text_features),
             }
             profiling = {
                 "batch data time (s)": data_time_m.val,
                 "bathc total time (s)": batch_time_m.val,
             }
 
+            if args.add_teacher_projection_AE:
+                log_data['loss_projection_AE'] = loss_projection_AE.item()
 
             for name, val in log_data.items():
                 name = "training/" + name

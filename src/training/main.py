@@ -1,3 +1,5 @@
+
+import time
 import logging
 import os
 import random
@@ -6,8 +8,9 @@ from datetime import datetime
 import numpy as np
 import torch
 from torch import optim
+import torch.distributed as dist
 from torch.cuda.amp import GradScaler
-import time
+
 try:
     import wandb
 except ImportError:
@@ -23,19 +26,23 @@ try:
 except ImportError:
     hvd = None
 
-from open_clip import create_model_and_transforms, trace_model
+from open_clip import trace_model
 from sentence_transformers import SentenceTransformer
+from training.visual_model import get_visual_model_and_preprocess
 
+# from training.clustering import Clustering
 from training.data import get_data
 from training.distributed import is_master, init_distributed_device, world_info_from_env
 from training.logger import setup_logging
 from training.params import parse_args
 from training.scheduler import cosine_lr
 from training.train import train_one_epoch, feature_extraction_one_epoch
-from training.clustering import Clustering
 from training.evaluations.evaluation import evaluate
+from training.projection import add_projection_head
 
-import torch.distributed as dist
+from distiller import get_distiller
+
+
 
 # to disable warning "huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks..."
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -132,18 +139,12 @@ def main():
     teacher = SentenceTransformer(args.pretrained_text)
     teacher.to(device=args.device)
 
-    CLIP_model, preprocess_train, preprocess_val = create_model_and_transforms(
-        args.model,
-        args.pretrained,
-        precision=args.precision,
-        device=device,
-        jit=args.torchscript,
-        force_quick_gelu=args.force_quick_gelu,
-        args=args
-    )
-    # CLIP model created by OpenCLIP has image and text tower,
-    # remove text tower and leave the image tower as student.
-    student = CLIP_model.visual
+    student, preprocess_train, preprocess_val = get_visual_model_and_preprocess(args)   
+    if args.freeze_student_backbone:
+        for param in student.parameters():
+            param.requires_grad = False
+            
+    student = add_projection_head(student, student.output_dim, args)
 
     if is_master(args):
         logging.info('student:\n'+str(student))
@@ -169,7 +170,9 @@ def main():
             ddp_args['static_graph'] = True
         student = torch.nn.parallel.DistributedDataParallel(
             student, 
-            device_ids=[device], **ddp_args, 
+            device_ids=[device], 
+            broadcast_buffers=False,
+            **ddp_args, 
         )
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -180,18 +183,13 @@ def main():
     if args.train_data:
         assert not args.trace, 'Cannot train with traced model'
         # TODO: include or exclude projection head?
-        exclude = lambda n, p: p.ndim < 2 or "bn" in n or "ln" in n or "bias" in n or 'logit_scale' in n or 'projection_head' in n 
+        exclude = lambda n, p: p.ndim < 2 or "bn" in n or "ln" in n or "bias" in n or 'logit_scale' in n# or 'projection_head' in n 
         include = lambda n, p: not exclude(n, p)
 
         named_parameters = list(student.named_parameters())
         gain_or_bias_params = [p for n, p in named_parameters if exclude(n, p) and p.requires_grad]
         rest_params = [p for n, p in named_parameters if include(n, p) and p.requires_grad]
 
-        # if is_master(args):
-        #     logging.info(f"named_parameters:")
-        #     for n, p in named_parameters:
-        #         logging.info(f'\t{n}')
-        
         optimizer = optim.AdamW(
             [
                 {"params": gain_or_bias_params, "weight_decay": 0.},
@@ -292,15 +290,15 @@ def main():
         evaluate(student, teacher, start_epoch, preprocess_val, args, writer)
         return
 
-    clustering = Clustering(args)
-
+    #clustering = Clustering(args)
+    distiller = get_distiller(args.distiller)(args)
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Start training loop
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     
     profiling = {
-        "epsidoe feature extraction time (m)": 0,
-        "epsidoe kmeans time (m)": 0,
+        #"epsidoe feature extraction time (m)": 0,
+        #"epsidoe kmeans time (m)": 0,
         "epsidoe model training time (m)": 0,
         "epsidoe total time (m)": 0,
     }
@@ -315,82 +313,82 @@ def main():
             if is_master(args):
                 logging.info(f"Randomly select {args.episode_size} samples from full dataset {args.dataset_size} as current episode.")
         
-            if args.clustering_frequency!=-1 and epoch % args.clustering_frequency == 0:
-                clustering.reset(args.k)
-                # --- Episodic Training Step 1: Feature Extraction --- # 
-                start = time.time()
-                feature_extraction_one_epoch(student, data, epoch, optimizer, scaler, scheduler, clustering, args, writer)
-                if is_master(args):
-                    duration = (time.time()-start)/60
-                    profiling['epsidoe feature extraction time (m)'] = duration
-                    logging.info(f'[Profiling] Feature extraction finished in {duration:.2f} minute.')
+            # if args.clustering_frequency!=-1 and epoch % args.clustering_frequency == 0:
+            #     clustering.reset(args.k)
+            #     # --- Episodic Training Step 1: Feature Extraction --- # 
+            #     start = time.time()
+            #     feature_extraction_one_epoch(student, data, epoch, optimizer, scaler, scheduler, clustering, args, writer)
+            #     if is_master(args):
+            #         duration = (time.time()-start)/60
+            #         profiling['epsidoe feature extraction time (m)'] = duration
+            #         logging.info(f'[Profiling] Feature extraction finished in {duration:.2f} minute.')
                 
-                # --- Episodic Training Step 2: Prototype Construction --- #
-                if is_master(args):
-                    start = time.time()
-                    img_iteration_stats, text_iteration_stats = clustering.generate_labels(args.k, args)
-                    clustering.log_kmeans_error(img_iteration_stats, epoch, writer, args, 'image')
-                    clustering.log_kmeans_error(text_iteration_stats, epoch, writer, args, 'text')
+            #     # --- Episodic Training Step 2: Prototype Construction --- #
+            #     if is_master(args):
+            #         start = time.time()
+            #         img_iteration_stats, text_iteration_stats = clustering.generate_labels(args.k, args)
+            #         clustering.log_kmeans_error(img_iteration_stats, epoch, writer, args, 'image')
+            #         clustering.log_kmeans_error(text_iteration_stats, epoch, writer, args, 'text')
 
-                    duration = (time.time()-start)/60
-                    profiling['epsidoe kmeans time (m)'] = duration
-                    logging.info(f'[Profiling] K-Means clustering finished in {duration:.2f} minute.')
+            #         duration = (time.time()-start)/60
+            #         profiling['epsidoe kmeans time (m)'] = duration
+            #         logging.info(f'[Profiling] K-Means clustering finished in {duration:.2f} minute.')
                     
-                    # FIXME: somehow following codes affect model performance... I don't know why
-                    # metrics = clustering.analyze_labels()
-                    # for name, val in metrics.items():
-                    #     if writer is not None:
-                    #         writer.add_scalar('clustering/' + name, val, epoch)
-                    #     if args.wandb:
-                    #         wandb.log({'clustering/' + name: val, 'step': epoch})
+            #         # FIXME: somehow following codes affect model performance... I don't know why
+            #         # metrics = clustering.analyze_labels()
+            #         # for name, val in metrics.items():
+            #         #     if writer is not None:
+            #         #         writer.add_scalar('clustering/' + name, val, epoch)
+            #         #     if args.wandb:
+            #         #         wandb.log({'clustering/' + name: val, 'step': epoch})
 
-                    if args.visualize_frequency != -1 and epoch % args.visualize_frequency == 0:
-                        visualize_start = time.time()
-                        clustering.show_samples(dataset=data['train'].dataset, modality='image',file_name=os.path.join(args.visualization_path, f'samples_image_label@epoch{epoch+1}'))
-                        clustering.show_samples(dataset=data['train'].dataset, modality='text',file_name=os.path.join(args.visualization_path, f'samples_text_label@epoch{epoch+1}'))
-                        clustering.show_tsne(file_name=os.path.join(args.visualization_path, f'TSNE@epoch{epoch+1}'), truncate=200000, title=f"Epoch {epoch+1}")
-                        logging.info(f'[Profiling] Cluster visualization finished in {(time.time()-visualize_start)/60:.2f} minute.')                    
+            #         if args.visualize_frequency != -1 and epoch % args.visualize_frequency == 0:
+            #             visualize_start = time.time()
+            #             clustering.show_samples(dataset=data['train'].dataset, modality='image',file_name=os.path.join(args.visualization_path, f'samples_image_label@epoch{epoch+1}'))
+            #             clustering.show_samples(dataset=data['train'].dataset, modality='text',file_name=os.path.join(args.visualization_path, f'samples_text_label@epoch{epoch+1}'))
+            #             clustering.show_tsne(file_name=os.path.join(args.visualization_path, f'TSNE@epoch{epoch+1}'), truncate=200000, title=f"Epoch {epoch+1}")
+            #             logging.info(f'[Profiling] Cluster visualization finished in {(time.time()-visualize_start)/60:.2f} minute.')                    
             
-                    if not args.PBT and args.external_teacher is not None:
-                        logging.warning('External teacher supervision can not be applied without PBT. Skip external prototype construction.')      
+            #         if not args.PBT and args.external_teacher is not None:
+            #             logging.warning('External teacher supervision can not be applied without PBT. Skip external prototype construction.')      
 
-                    start = time.time()
-                    if args.PBT:
-                        clustering.img_centroids_translated_from_text_prototypes = clustering.PBT(
-                            k=args.k,
-                            teacher_labels=clustering.text_labels, 
-                            student_features=clustering.img_feature
-                            )
-                        clustering.text_centroids_translated_from_image_prototypes = clustering.PBT(
-                            k=args.k,
-                            teacher_labels=clustering.img_labels, 
-                            student_features=clustering.text_feature
-                            )
-                        if args.external_teacher is not None:
-                            external_teacher = np.load(args.external_teacher)
-                            logging.info(f'Loaded external teacher ({external_teacher.shape}) from file "{args.external_teacher}".')
-                            clustering.generate_labels_from_external_teacher(external_teacher[index_mapping], args.k, args)
-                            clustering.img_centroids_translated_from_external_prototypes = clustering.PBT(
-                                k=args.k,
-                                teacher_labels=clustering.external_labels, 
-                                student_features=clustering.img_feature
-                                )
-                            clustering.text_centroids_translated_from_external_prototypes = clustering.PBT(
-                                k=args.k,
-                                teacher_labels=clustering.external_labels, 
-                                student_features=clustering.text_feature
-                                )
-                        duration = (time.time()-start)/60
-                        profiling['epsidoe PBT time (m)'] = duration
-                        logging.info(f'[Profiling] PBT finished in {duration:.2f} minute.')
+            #         start = time.time()
+            #         if args.PBT:
+            #             clustering.img_centroids_translated_from_text_prototypes = clustering.PBT(
+            #                 k=args.k,
+            #                 teacher_labels=clustering.text_labels, 
+            #                 student_features=clustering.img_feature
+            #                 )
+            #             clustering.text_centroids_translated_from_image_prototypes = clustering.PBT(
+            #                 k=args.k,
+            #                 teacher_labels=clustering.img_labels, 
+            #                 student_features=clustering.text_feature
+            #                 )
+            #             if args.external_teacher is not None:
+            #                 external_teacher = np.load(args.external_teacher)
+            #                 logging.info(f'Loaded external teacher ({external_teacher.shape}) from file "{args.external_teacher}".')
+            #                 clustering.generate_labels_from_external_teacher(external_teacher[index_mapping], args.k, args)
+            #                 clustering.img_centroids_translated_from_external_prototypes = clustering.PBT(
+            #                     k=args.k,
+            #                     teacher_labels=clustering.external_labels, 
+            #                     student_features=clustering.img_feature
+            #                     )
+            #                 clustering.text_centroids_translated_from_external_prototypes = clustering.PBT(
+            #                     k=args.k,
+            #                     teacher_labels=clustering.external_labels, 
+            #                     student_features=clustering.text_feature
+            #                     )
+            #             duration = (time.time()-start)/60
+            #             profiling['epsidoe PBT time (m)'] = duration
+            #             logging.info(f'[Profiling] PBT finished in {duration:.2f} minute.')
 
-                if args.distributed:
-                    dist.barrier()
-                clustering.sync_prototypes(args)   
+            #     if args.distributed:
+            #         dist.barrier()
+            #     clustering.sync_prototypes(args)   
         
         # --- Episodic Training Step 3: Model Training --- #
         start = time.time()
-        train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler, clustering, args, writer)
+        train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler, distiller, args, writer)
         if is_master(args):
             duration = (time.time()-start)/60
             profiling['epsidoe model training time (m)'] = duration
