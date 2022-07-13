@@ -31,6 +31,10 @@ class CsvDataset():
 
         self.images = df[img_key].tolist()
         self.captions = df[caption_key].tolist()
+
+        import re
+        for i in range(len(self.captions)):
+            self.captions[i] = ' '.join(re.split(' |.', self.captions[i])[:77])
         
     def get_data(self, idx):
             
@@ -96,7 +100,8 @@ def show_samples(dataset, label, file_name, sample_per_class=16, max_rows=16):
 
 if __name__=='__main__':
     dataset = CsvDataset()
-    for model in ['average_word_embeddings_glove.6B.300d', 'all-MiniLM-L6-v2', 'all-mpnet-base-v2']:
+    #for model in ['average_word_embeddings_glove.6B.300d', 'all-MiniLM-L6-v2', 'all-mpnet-base-v2']:
+    for model in ['clip-ViT-L-14']:
         embedder = SentenceTransformer(model)
 
         # Corpus with example sentences

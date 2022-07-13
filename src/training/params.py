@@ -40,6 +40,12 @@ def parse_args():
         help="rt",
     ) 
     parser.add_argument(
+        "--res-teacher-projection",
+        action="store_true",
+        default=False,
+        help="rt",
+    ) 
+    parser.add_argument(
         "--add-teacher-projection-AE",
         action="store_true",
         default=False,

@@ -68,15 +68,15 @@ def train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler,
                     ).detach()
             if args.add_teacher_projection_head:
                 if args.distributed:
-                    text_features = student.module.text_projection_head(raw_text_features)
+                    text_features = student.module.text_projection_head(raw_text_features) + raw_text_features if args.res_teacher_projection else student.module.text_projection_head(raw_text_features)
                     if args.add_teacher_projection_AE:
-                        reconstructed_text_features = student.module.text_decoder(text_features)
+                        reconstructed_text_features = student.module.text_decoder(text_features) + text_features if args.res_teacher_projection else student.module.text_decoder(text_features)
                         loss_projection_AE = MSE(reconstructed_text_features, raw_text_features)
                         total_loss += args.w_projection_AE * loss_projection_AE
                 else:
-                    text_features = student.text_projection_head(raw_text_features)
+                    text_features = student.text_projection_head(raw_text_features) + raw_text_features if args.res_teacher_projection else student.text_projection_head(raw_text_features)
                     if args.add_teacher_projection_AE:
-                        reconstructed_text_features = student.text_decoder(text_features)
+                        reconstructed_text_features = student.text_decoder(text_features) + text_features if args.res_teacher_projection else student.text_decoder(text_features)
                         loss_projection_AE = MSE(reconstructed_text_features, raw_text_features)
                         total_loss += args.w_projection_AE * loss_projection_AE
             else:

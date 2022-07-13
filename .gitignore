@@ -5,6 +5,7 @@ features/
 results/
 scripts/
 weights/
+cache/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

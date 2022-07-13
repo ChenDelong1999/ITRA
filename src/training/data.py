@@ -39,6 +39,7 @@ class CsvDataset(Dataset):
 
         self.images = df[img_key].tolist()
         self.captions = df[caption_key].tolist()
+
         self.transforms = transforms
         self.inversed_normalize = Compose([
             Normalize((0.0, 0.0, 0.0), (1/0.26862954, 1/0.26130258, 1/0.27577711)),
@@ -81,7 +82,7 @@ class CsvDataset(Dataset):
         image = self.transforms(image)
         texts = str(self.captions[index].decode('utf-8'))
         
-        return episodic_index, image, texts
+        return episodic_index, image, texts[:100]# FIXME: '[:100]' is a temperate solution of CLIP's tokenizer overlength bug
     
     def get_data(self, episode_index):
         idx = self.index_mapping[episode_index]
