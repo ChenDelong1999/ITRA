@@ -3,7 +3,6 @@ wandb/
 models/
 features/
 results/
-scripts/
 weights/
 cache/
 
