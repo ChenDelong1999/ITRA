@@ -117,32 +117,39 @@ class CsvDataset(Dataset):
 
 
 
-def show_tsne(image_features, text_features, file_name, title):
+def show_tsne(image_backbone_features, image_features, text_features, file_name, title):
 
     logging.info('Fitting T-SNE')
                     
+    tsne_img_backbone = TSNE(verbose=True, n_jobs=64, n_iter=500).fit(image_backbone_features)
     tsne_img = TSNE(verbose=True, n_jobs=64, n_iter=500).fit(image_features)
     tsne_text = TSNE(verbose=True, n_jobs=64, n_iter=500).fit(text_features)
     tsne_all = TSNE(verbose=True, n_jobs=64, n_iter=500).fit(torch.cat([image_features, text_features], dim=0))
     
-    plt.figure(figsize=(75,25))
-    plt.rc('font', size=25) 
+    plt.figure(figsize=(100,25))
+    plt.rc('font', size=30) 
     plt.subplots_adjust(top=0.9,wspace=0.05,hspace=0.05)
 
-    plt.subplot(131)
+    plt.subplot(141)
+    plt.xticks([])
+    plt.yticks([])
+    plt.title('image backbone features')
+    plt.scatter(tsne_img_backbone[:,0], tsne_img_backbone[:,1], s=1.5, c='green', alpha=0.8)
+
+    plt.subplot(142)
     plt.xticks([])
     plt.yticks([])
     plt.title('image features')
     plt.scatter(tsne_img[:,0], tsne_img[:,1], s=1.5, c='red', alpha=0.8)
 
-    plt.subplot(132)
+    plt.subplot(143)
     plt.xticks([])
     plt.yticks([])
     plt.title('image-text features')
     plt.scatter(tsne_all[:len(image_features),0], tsne_all[:len(image_features),1], s=1, c='red', alpha=0.5)
     plt.scatter(tsne_all[len(image_features):,0], tsne_all[len(image_features):,1], s=1, c='blue', alpha=0.5)
 
-    plt.subplot(133)
+    plt.subplot(144)
     plt.xticks([])
     plt.yticks([])
     plt.title('text features')
@@ -156,6 +163,7 @@ def show_tsne(image_features, text_features, file_name, title):
 
 def extract_feature(student, teacher, dataset, args):
     dataloader = DataLoader(dataset, batch_size=100, num_workers=8, persistent_workers=True)
+    all_image_backbone_features = []
     all_image_features = []
     all_text_features = []
     for (index, images, texts) in tqdm(dataloader):
@@ -173,19 +181,22 @@ def extract_feature(student, teacher, dataset, args):
             raw_image_features = student(images.cuda())    
             image_features = student.image_projection_head(raw_image_features)      
         
+        raw_image_features = F.normalize(raw_image_features, dim=1)
         image_features = F.normalize(image_features, dim=1)
         text_features = F.normalize(text_features, dim=1)
 
+        all_image_backbone_features.append(raw_image_features)
         all_image_features.append(image_features)
         all_text_features.append(text_features)
     
+    all_image_backbone_features = torch.stack(all_image_backbone_features).view(-1, all_image_backbone_features[0].size(-1))
     all_image_features = torch.stack(all_image_features).view(-1, args.projection_dim)
     all_text_features = torch.stack(all_text_features).view(-1, args.projection_dim)
 
     # print(all_image_features.size(), all_text_features.size())
     # np.save(arr=[all_image_features.cpu().numpy(), all_text_features.cpu().numpy()], file='cache/features.npy')
     # exit()
-    return all_image_features.cpu(), all_text_features.cpu()
+    return all_image_backbone_features.cpu(), all_image_features.cpu(), all_text_features.cpu()
 
 
 def evaluate_checkpoint(checkpoint_path, epoch, args):
@@ -210,8 +221,8 @@ def evaluate_checkpoint(checkpoint_path, epoch, args):
     teacher = teacher.to(device)
 
     dataset = CsvDataset(args.input_filename, preprocess_val, dataset_size=args.num_points)
-    image_features, text_features = extract_feature(student, teacher, dataset, args)
-    show_tsne(image_features, text_features, file_name=os.path.join(args.exp_dir, 'visualization', f'tsne({len(dataset)})_epoch_{epoch}.png'), title=args.exp_dir)
+    image_backbone_features, image_features, text_features = extract_feature(student, teacher, dataset, args)
+    show_tsne(image_backbone_features, image_features, text_features, file_name=os.path.join(args.exp_dir, 'visualization', f'tsne({len(dataset)})_epoch_{epoch}.png'), title=args.exp_dir)
     
 
 def load_params(params_file, args):
@@ -235,6 +246,7 @@ def load_params(params_file, args):
 
 if __name__ == '__main__':
     exp_dir = input('Please input your experiment dir: ')
+    num_points = input('Sample how many points for TSNE? (press "enter" to use 200000 points) ')
     single_eval = input('Specify a checkpoint epoch? (press "enter" to scan and evaluate all checkpoints) ')
     
     checkpoint_dir = os.path.join(exp_dir, 'checkpoints')
@@ -243,8 +255,9 @@ if __name__ == '__main__':
     args = parse_args()
     args = load_params(params_file, args)
 
+    args.num_points = int(num_points) if num_points else 200000
+
     args.input_filename = 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv'
-    args.num_points = 200000
     args.exp_dir = exp_dir
 
     args.zeroshot_frequency = 1

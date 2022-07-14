@@ -1,9 +1,11 @@
 import torch
 import torch.nn as nn
-from .SimReg import SimReg, SimRegL1
+from .SimReg import SimReg, SimRegL1, SimRegSmoothL1
 from .RKD import RKD
 from .CompRess import CompReSS, CompReSSA
 from .CLIP import CLIPLoss
+from .DINO import DINOLoss
+from .SEED import SEED
 
 
 def get_distiller(distiller):
@@ -11,14 +13,20 @@ def get_distiller(distiller):
         return SimReg
     elif distiller=='SimReg-L1':
         return SimRegL1
+    elif distiller=='SimReg-SmoothL1':
+        return SimRegSmoothL1
     elif distiller=='RKD':
         return RKD
-    elif distiller=='CompRess':
+    elif distiller=='CompRess-2q':
         return CompReSS
     elif distiller=='CompRess-1q':
         return CompReSSA
-    elif distiller=='CLIP':
+    elif distiller=='SEED':
+        return SEED
+    elif distiller=='InfoNCE':
         return CLIPLoss
+    elif distiller=='DINO':
+        return DINOLoss
 
 
 if __name__=='__main__':

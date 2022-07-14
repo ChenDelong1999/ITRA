@@ -291,7 +291,7 @@ def main():
         return
 
     #clustering = Clustering(args)
-    distiller = get_distiller(args.distiller)(args)
+    distiller = get_distiller(args.distiller)(args).to(args.device)
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Start training loop
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 

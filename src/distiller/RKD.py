@@ -29,16 +29,19 @@ class RKD(nn.Module):
         student_feature = F.normalize(student_feature, dim=1)
         
         # Distance loss
-        with torch.no_grad():
-            t_d = self._pdist(teacher_feature, self.squared)
-            mean_td = t_d[t_d > 0].mean()
-            t_d = t_d / mean_td
-        
-        d = self._pdist(student_feature, self.squared)
-        mean_d = d[d > 0].mean()
-        d = d / mean_d
+        if self.args.w_rkd_d!=0:
+            with torch.no_grad():
+                t_d = self._pdist(teacher_feature, self.squared)
+                mean_td = t_d[t_d > 0].mean()
+                t_d = t_d / mean_td
+            
+            d = self._pdist(student_feature, self.squared)
+            mean_d = d[d > 0].mean()
+            d = d / mean_d
 
-        loss_distance = F.smooth_l1_loss(d, t_d)
+            loss_distance = F.smooth_l1_loss(d, t_d)
+        else:
+            loss_distance = 0
 
         # Angle loss
         if self.args.w_rkd_a!=0:
