@@ -22,11 +22,9 @@ import torch.distributed as dist
 from training.evaluations.analyze_features import get_modality_gap
 from utils.training_utils import AverageMeter, unwrap_model
 
-MSE = nn.MSELoss()
 
 def train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler, distiller, args, tb_writer):
     device = torch.device(args.device) 
-    ZERO = torch.zeros(1).to(args.device)
     
     autocast = torch.cuda.amp.autocast if args.precision == 'amp' else suppress
 
@@ -50,57 +48,50 @@ def train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler,
         step = num_batches_per_epoch * epoch + i
         scheduler(step)
         index, images, texts = batch
-        if len(index)!=args.batch_size: # drop last incomplete small batch
-            continue
-        all_index = get_gathered_item(index.cuda(), args)
+        if len(index)!=args.batch_size:
+            continue  # drop last incomplete small batch
+        
+        #all_index = get_gathered_item(index.cuda(), args)
         images = images.to(device=device, non_blocking=True)
         data_time_m.update(time.time() - end)
         optimizer.zero_grad()
 
-        total_loss = 0
         with autocast():
-            # Text Teacher
+            # # # # # # # # # # # # # # # # # # 
+            # Text Teacher forward
+            # # # # # # # # # # # # # # # # # # 
             with torch.no_grad():
-                raw_text_features = teacher.encode(
-                    texts,
-                    convert_to_tensor=True, 
-                    show_progress_bar=False
-                    ).detach()
-            if args.add_teacher_projection_head:
-                if args.distributed:
-                    text_features = student.module.text_projection_head(raw_text_features) + raw_text_features if args.res_teacher_projection else student.module.text_projection_head(raw_text_features)
-                    if args.add_teacher_projection_AE:
-                        reconstructed_text_features = student.module.text_decoder(text_features) + text_features if args.res_teacher_projection else student.module.text_decoder(text_features)
-                        loss_projection_AE = MSE(reconstructed_text_features, raw_text_features)
-                        total_loss += args.w_projection_AE * loss_projection_AE
+                raw_text_features = teacher.encode(texts, convert_to_tensor=True,  show_progress_bar=False).detach()
+                if args.distiller in ['ProtoCPC', 'DINO']:
+                    prototype = student.module.image_projection_head.last_layer if args.distributed else student.image_projection_head.last_layer
+                    text_features = prototype(raw_text_features)
                 else:
-                    text_features = student.text_projection_head(raw_text_features) + raw_text_features if args.res_teacher_projection else student.text_projection_head(raw_text_features)
-                    if args.add_teacher_projection_AE:
-                        reconstructed_text_features = student.text_decoder(text_features) + text_features if args.res_teacher_projection else student.text_decoder(text_features)
-                        loss_projection_AE = MSE(reconstructed_text_features, raw_text_features)
-                        total_loss += args.w_projection_AE * loss_projection_AE
-            else:
-                text_features = raw_text_features
+                    text_features = raw_text_features
 
-            # Image Student
+            # # # # # # # # # # # # # # # # # # 
+            # Image Student forward
+            # # # # # # # # # # # # # # # # # # 
             if args.freeze_student_backbone:
                 with torch.no_grad():
                     raw_image_features = student(images).detach()
             else:
                 raw_image_features = student(images)
-                
+            
+            image_features = student.module.image_projection_head(raw_image_features) if args.distributed else student.image_projection_head(raw_image_features)
+            
+            # # # # # # # # # # # # # # # # # # 
+            # loss backward
+            # # # # # # # # # # # # # # # # # # 
             if args.distributed:
-                image_features = student.module.image_projection_head(raw_image_features)
-            else:
-                image_features = student.image_projection_head(raw_image_features)
-
-            if args.distributed:
-                all_image_features, all_text_features = gather_features(image_features, text_features,
-                    args.local_loss, args.gather_with_grad, args.rank, args.world_size, args.horovod)
+                all_image_features, all_text_features = gather_features(
+                    image_features, text_features,
+                    args.local_loss, args.gather_with_grad, 
+                    args.rank, args.world_size, args.horovod
+                    )
             else:
                 all_image_features, all_text_features = image_features, text_features
             
-            total_loss += distiller(all_text_features, all_image_features)
+            total_loss = distiller(all_text_features, all_image_features)
 
         if scaler is not None:
             scaler.scale(total_loss).backward()
@@ -118,7 +109,7 @@ def train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler,
             total_loss.backward()
             norm = nn.utils.clip_grad_norm_(student.parameters(), max_norm=args.max_grad_norm)
             optimizer.step()
-
+        
         batch_time_m.update(time.time() - end)
         end = time.time()
         batch_count = i + 1
@@ -154,9 +145,6 @@ def train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler,
                 "batch data time (s)": data_time_m.val,
                 "bathc total time (s)": batch_time_m.val,
             }
-
-            if args.add_teacher_projection_AE:
-                log_data['loss_projection_AE'] = loss_projection_AE.item()
 
             for name, val in log_data.items():
                 name = "training/" + name

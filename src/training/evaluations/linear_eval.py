@@ -167,7 +167,7 @@ def get_linear_eval_acc(model, dataset_name, root, preprocess, args):
 
     if args.linear_prob_mode=='sklearn':
         logging.info('Runing sklearn-based logistic regression')
-        classifier = sklearnLogisticRegression(random_state=0, C=0.316, max_iter=1000, verbose=1, n_jobs=32)
+        classifier = sklearnLogisticRegression(random_state=0, C=0.316, max_iter=1000, verbose=1, n_jobs=128)
         classifier.fit(train_features, train_labels)
         predictions = classifier.predict(test_features)
         accuracy = 100 * np.mean((test_labels == predictions).astype(np.float)) 

@@ -6,6 +6,7 @@ from .CompRess import CompReSS, CompReSSA
 from .CLIP import CLIPLoss
 from .DINO import DINOLoss
 from .SEED import SEED
+from .ProtoCPC import protocpc_loss
 
 
 def get_distiller(distiller):
@@ -27,6 +28,8 @@ def get_distiller(distiller):
         return CLIPLoss
     elif distiller=='DINO':
         return DINOLoss
+    elif distiller=='ProtoCPC':
+        return protocpc_loss
 
 
 if __name__=='__main__':

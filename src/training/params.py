@@ -17,7 +17,6 @@ def parse_args():
     # Knowledge Distillation Configurations
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     
-    parser.add_argument("--w-projection-AE", type=float, default=100., help="Loss weight.")
     parser.add_argument("--w-rkd-d", type=float, default=0.5, help="Loss weight.")
     parser.add_argument("--w-rkd-a", type=float, default=1.0, help="Loss weight.")
 
@@ -34,37 +33,19 @@ def parse_args():
         help="train student projection head only",
     ) 
     parser.add_argument(
-        "--add-teacher-projection-head",
-        action="store_true",
-        default=False,
-        help="rt",
-    ) 
-    parser.add_argument(
-        "--res-teacher-projection",
-        action="store_true",
-        default=False,
-        help="rt",
-    ) 
-    parser.add_argument(
-        "--add-teacher-projection-AE",
-        action="store_true",
-        default=False,
-        help="rt",
-    ) 
-    parser.add_argument(
         "--pretrained",
         default='',
         type=str,
         help="Use a pretrained CLIP model weights with the specified tag or file path.",
     )
     parser.add_argument(
-        "--pretrained-image",
+        "--image-teacher",
         default='',
         type=str,
-        help="Load imagenet pretrained weights for image tower backbone if available.",
+        help="To be implement",
     )
     parser.add_argument(
-        "--pretrained-text",
+        "--text-teacher",
         default=None,
         type=str,
         help="Load pretrained language model as text tower. See https://www.sbert.net/docs/pretrained_models.html for avaliable models",
@@ -125,26 +106,8 @@ def parse_args():
     )  
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    # Prototypical contrast
+    # Projection head
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    parser.add_argument(
-        "--external-teacher",
-        type=str,
-        default=None,
-        help="Saved numpy array with shape (dataset_size, feature_dim) as external teacher. leave it as None to disable the external teacher."
-    )
-    parser.add_argument(
-        "--add-projection-head",
-        action="store_true",
-        default=False,
-        help="add two projection heads and leanable temperatures to CLIP",
-    ) 
-    parser.add_argument(
-        "--PBT",
-        action="store_true",
-        default=False,
-        help="enable Prototype Back Translation",
-    ) 
     parser.add_argument(
         "--projection-dim",
         type=int,
@@ -162,36 +125,6 @@ def parse_args():
         type=int,
         default=1,
         help="dimension of projected representations",
-    ) 
-    parser.add_argument(
-        "--target-temperature",
-        type=float,
-        default=-1.0,
-        help="target temperature to calculate teacher scroes in proto loss",
-    ) 
-    parser.add_argument(
-        "--clustering-frequency",
-        type=int,
-        default=-1,
-        help="update prototypes, set to -1 for non ProtoCLIP models",
-    ) 
-    parser.add_argument(
-        "--k",
-        type=int,
-        default=20000,
-        help="dimension of projected representations",
-    ) 
-    parser.add_argument(
-        "--kmeans-max-iter",
-        type=int,
-        default=20,
-        help="maximum iterations of K-Means optimization",
-    ) 
-    parser.add_argument(
-        "--kmeans-nredo",
-        type=int,
-        default=1,
-        help="random re-initialize and do K-Means for how many times",
     ) 
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -230,8 +163,6 @@ def parse_args():
         type=str,
         help="path to latest checkpoint (default: none)",
     )
-    
-
     parser.add_argument(
         "--report-to",
         default='',

@@ -9,7 +9,7 @@ class DINOLoss(nn.Module):
     def __init__(self, args):
         super().__init__()
         
-        out_dim = args.projection_dim 
+        out_dim = 65536
         ncrops=0
         warmup_teacher_temp=0.04
         teacher_temp=0.04
@@ -30,7 +30,7 @@ class DINOLoss(nn.Module):
             np.ones(nepochs - warmup_teacher_temp_epochs) * teacher_temp
         ))
 
-    def forward(self, student_output, teacher_output):
+    def forward(self, teacher_output, student_output):
         """
         Cross-entropy between softmax outputs of the teacher and student networks.
         """

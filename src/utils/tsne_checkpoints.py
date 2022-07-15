@@ -27,7 +27,7 @@ from torchvision.transforms import Compose, Normalize
 import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.distributed import DistributedSampler
-
+import random
 try:
     from refile import smart_open
     import nori2 as nori
@@ -38,7 +38,7 @@ except ImportError:
 
 import matplotlib.pyplot as plt
 from openTSNE import TSNE
-
+from training.evaluations.zero_shot import imagenet_classnames, imagenet_templates
 
 class CsvDataset(Dataset):
     def __init__(self, input_filename, transforms, img_key='filepath', caption_key='title', sep="\t", dataset_size=None, index_mapping=None):
@@ -117,7 +117,51 @@ class CsvDataset(Dataset):
 
 
 
-def show_tsne(image_backbone_features, image_features, text_features, file_name, title):
+class ImageNet_nori(Dataset):
+    # modified from https://git-core.megvii-inc.com/lizeming/mt/-/blob/dev/megssl/data/datasets/imagenet.py
+    def __init__(self, transform, split='val'):
+
+        super(ImageNet_nori, self).__init__()
+        if split=='train':
+            nori_path = "s3://generalDetection/ILSVRC2012/imagenet.train.nori.list"
+        elif split=='val':
+            nori_path = "s3://generalDetection/ILSVRC2012/imagenet.val.nori.list"
+
+        self.f = None #nori.Fetcher()
+        self.f_list = []
+        self.transform = transform
+
+        with smart_open(nori_path, "r") as f:
+            for line in f:
+                self.f_list.append(line.strip().split())
+
+        self.labels = []
+        for i in self.f_list:
+            self.labels.append(int(i[1]))
+        self.labels = self.labels
+
+              
+    def __getitem__(self, idx):
+        if self.f is None:
+            self.f = nori.Fetcher()
+
+        ls = self.f_list[idx]
+        raw_img = Image.open(io.BytesIO(self.f.get(ls[0]))).convert('RGB')
+        if self.transform is not None:
+            img = self.transform(raw_img)
+        else:
+            img = raw_img
+        raw_img.close()
+        label = int(ls[1])
+
+        return idx, img, imagenet_templates[random.randint(0, len(imagenet_templates)-1)](imagenet_classnames[label])
+
+    def __len__(self):
+        return len(self.f_list)
+
+
+
+def show_tsne(image_backbone_features, image_features, text_features, file_name, title, labels=None):
 
     logging.info('Fitting T-SNE')
                     
@@ -134,26 +178,40 @@ def show_tsne(image_backbone_features, image_features, text_features, file_name,
     plt.xticks([])
     plt.yticks([])
     plt.title('image backbone features')
-    plt.scatter(tsne_img_backbone[:,0], tsne_img_backbone[:,1], s=1.5, c='green', alpha=0.8)
+    if labels is None:
+        plt.scatter(tsne_img_backbone[:,0], tsne_img_backbone[:,1], s=1.5, c='green', alpha=0.8)
+    else:
+        plt.scatter(tsne_img_backbone[:,0], tsne_img_backbone[:,1], s=1.5, c=labels, cmap='tab10', alpha=0.8)
 
     plt.subplot(142)
     plt.xticks([])
     plt.yticks([])
     plt.title('image features')
-    plt.scatter(tsne_img[:,0], tsne_img[:,1], s=1.5, c='red', alpha=0.8)
+    if labels is None:
+        plt.scatter(tsne_img[:,0], tsne_img[:,1], s=1.5, c='red', alpha=0.8)
+    else:
+        plt.scatter(tsne_img[:,0], tsne_img[:,1], s=1.5, c=labels, cmap='tab10', alpha=0.8)
 
     plt.subplot(143)
     plt.xticks([])
     plt.yticks([])
     plt.title('image-text features')
-    plt.scatter(tsne_all[:len(image_features),0], tsne_all[:len(image_features),1], s=1, c='red', alpha=0.5)
-    plt.scatter(tsne_all[len(image_features):,0], tsne_all[len(image_features):,1], s=1, c='blue', alpha=0.5)
+    if labels is None:
+        plt.scatter(tsne_all[:len(image_features),0], tsne_all[:len(image_features),1], s=1.5, c='red', alpha=0.5)
+        plt.scatter(tsne_all[len(image_features):,0], tsne_all[len(image_features):,1], s=1.5, c='blue', alpha=0.5)
+    else:
+        plt.scatter(tsne_all[:len(image_features),0], tsne_all[:len(image_features),1], s=1.5, c=labels, cmap='tab10', alpha=0.8)
+        plt.scatter(tsne_all[len(image_features):,0], tsne_all[len(image_features):,1], s=1.5, c=labels, cmap='tab10', alpha=0.8)
+
 
     plt.subplot(144)
     plt.xticks([])
     plt.yticks([])
     plt.title('text features')
-    plt.scatter(tsne_text[:,0], tsne_text[:,1], s=1.5, c='blue', alpha=0.8)
+    if labels is None:
+        plt.scatter(tsne_text[:,0], tsne_text[:,1], s=1.5, c='red', alpha=0.8)
+    else:
+        plt.scatter(tsne_text[:,0], tsne_text[:,1], s=1.5, c=labels, cmap='tab10', alpha=0.8)
     
     plt.suptitle(title)
     plt.savefig(file_name, bbox_inches='tight')
@@ -161,12 +219,13 @@ def show_tsne(image_backbone_features, image_features, text_features, file_name,
     logging.info(f'T-SNE visuallization saved to: {file_name}')
 
 
-def extract_feature(student, teacher, dataset, args):
-    dataloader = DataLoader(dataset, batch_size=100, num_workers=8, persistent_workers=True)
+def extract_feature(student, teacher, dataset_CC, args):
+    dataloader_CC = DataLoader(dataset_CC, batch_size=100, num_workers=8, persistent_workers=True)
+    
     all_image_backbone_features = []
     all_image_features = []
     all_text_features = []
-    for (index, images, texts) in tqdm(dataloader):
+    for (index, images, texts) in tqdm(dataloader_CC):
         with torch.no_grad():
             raw_text_features = teacher.encode(
                     texts,
@@ -193,9 +252,6 @@ def extract_feature(student, teacher, dataset, args):
     all_image_features = torch.stack(all_image_features).view(-1, args.projection_dim)
     all_text_features = torch.stack(all_text_features).view(-1, args.projection_dim)
 
-    # print(all_image_features.size(), all_text_features.size())
-    # np.save(arr=[all_image_features.cpu().numpy(), all_text_features.cpu().numpy()], file='cache/features.npy')
-    # exit()
     return all_image_backbone_features.cpu(), all_image_features.cpu(), all_text_features.cpu()
 
 
@@ -220,9 +276,22 @@ def evaluate_checkpoint(checkpoint_path, epoch, args):
     student = student.to(device)
     teacher = teacher.to(device)
 
-    dataset = CsvDataset(args.input_filename, preprocess_val, dataset_size=args.num_points)
-    image_backbone_features, image_features, text_features = extract_feature(student, teacher, dataset, args)
-    show_tsne(image_backbone_features, image_features, text_features, file_name=os.path.join(args.exp_dir, 'visualization', f'tsne({len(dataset)})_epoch_{epoch}.png'), title=args.exp_dir)
+    # Conceptual Captions
+    dataset_CC = CsvDataset(args.input_filename, preprocess_val, dataset_size=args.num_points)
+    image_backbone_features, image_features, text_features = extract_feature(student, teacher, dataset_CC, args)
+    show_tsne(
+        image_backbone_features, image_features, text_features, 
+        file_name=os.path.join(args.exp_dir, 'visualization', f'tsne(CC-{len(dataset_CC)})_epoch_{epoch}.png'), 
+        title=args.exp_dir)
+    
+    # ImageNet
+    dataset_ImageNet = ImageNet_nori(transform=preprocess_val, split='val')
+    image_backbone_features, image_features, text_features  = extract_feature(student, teacher, dataset_ImageNet, args)
+    show_tsne(
+        image_backbone_features, image_features, text_features, 
+        file_name=os.path.join(args.exp_dir, 'visualization', f'tsne(ImageNet-val)_epoch_{epoch}.png'), 
+        title=args.exp_dir,
+        labels=dataset_ImageNet.labels)
     
 
 def load_params(params_file, args):
@@ -245,6 +314,8 @@ def load_params(params_file, args):
 
 
 if __name__ == '__main__':
+
+    
     exp_dir = input('Please input your experiment dir: ')
     num_points = input('Sample how many points for TSNE? (press "enter" to use 200000 points) ')
     single_eval = input('Specify a checkpoint epoch? (press "enter" to scan and evaluate all checkpoints) ')

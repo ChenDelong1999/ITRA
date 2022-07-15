@@ -23,31 +23,25 @@ import logging
 
 def add_projection_head(model, input_dim, args):
     # model.image_projection_head = get_projection_head(input_dim, args)
-    model.image_projection_head = DINOHead(
-        input_dim, 
-        -1, 
-        bottleneck_dim=args.projection_dim,
-        nlayers=args.projection_n_layers, 
-        skip_last_layer=True
-        ).to(args.device)
     
-    if args.add_teacher_projection_head:
-        model.text_projection_head = DINOHead(
+    if args.distiller in ['ProtoCPC', 'DINO']:
+        model.image_projection_head = DINOHead(
+            input_dim, 
+            65536, 
+            bottleneck_dim=args.projection_dim,
+            nlayers=args.projection_n_layers, 
+            skip_last_layer=False
+            ).to(args.device)
+        
+    else:
+        model.image_projection_head = DINOHead(
             input_dim, 
             -1, 
             bottleneck_dim=args.projection_dim,
             nlayers=args.projection_n_layers, 
             skip_last_layer=True
             ).to(args.device)
-        
-        if args.add_teacher_projection_AE:
-            model.text_decoder = DINOHead(
-                input_dim, 
-                -1, 
-                bottleneck_dim=args.projection_dim,
-                nlayers=args.projection_n_layers, 
-                skip_last_layer=True
-                ).to(args.device)
+
     return model
 
 class DINOHead(nn.Module):
