@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class SimReg(nn.Module):
-    def __init__(self, args) -> None:
+    def __init__(self, args, dim) -> None:
         super().__init__()
         self.MSELoss = nn.MSELoss()
     
@@ -11,7 +11,7 @@ class SimReg(nn.Module):
         return self.MSELoss(F.normalize(teacher_feature, dim=1), F.normalize(student_feature, dim=1))
 
 class SimRegL1(nn.Module):
-    def __init__(self, args) -> None:
+    def __init__(self, args, dim) -> None:
         super().__init__()
         self.L1Loss = nn.L1Loss()
     
@@ -19,7 +19,7 @@ class SimRegL1(nn.Module):
         return self.L1Loss(F.normalize(teacher_feature, dim=1), F.normalize(student_feature, dim=1))
 
 class SimRegSmoothL1(nn.Module):
-    def __init__(self, args) -> None:
+    def __init__(self, args, dim) -> None:
         super().__init__()
         self.SmoothL1Loss = nn.SmoothL1Loss()
     

@@ -138,6 +138,40 @@ class ImageNet_nori(Dataset):
     def __len__(self):
         return len(self.f_list)
 
+class ImageNet_50k(Dataset):
+    # modified from https://git-core.megvii-inc.com/lizeming/mt/-/blob/dev/megssl/data/datasets/imagenet.py
+    def __init__(self, transform):
+
+        super(ImageNet_50k, self).__init__()
+        nori_path = "s3://generalDetection/ILSVRC2012/imagenet.train.nori.list"
+
+        self.f = None #nori.Fetcher()
+        self.f_list = []
+        self.transform = transform
+
+        with smart_open(nori_path, "r") as f:
+            for line in f:
+                self.f_list.append(line.strip().split())
+              
+    def __getitem__(self, idx):
+        idx = int(idx * 25)
+        if self.f is None:
+            self.f = nori.Fetcher()
+
+        ls = self.f_list[idx]
+        raw_img = Image.open(io.BytesIO(self.f.get(ls[0])))
+        if self.transform is not None:
+            img = self.transform(raw_img)
+        else:
+            img = raw_img
+        raw_img.close()
+        label = int(ls[1])
+
+        return img, label
+
+    def __len__(self):
+        return 50000
+
 
 @dataclass
 class DataInfo:

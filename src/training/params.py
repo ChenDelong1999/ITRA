@@ -40,13 +40,13 @@ def parse_args():
     )
     parser.add_argument(
         "--image-teacher",
-        default='',
+        default='none',
         type=str,
         help="To be implement",
     )
     parser.add_argument(
         "--text-teacher",
-        default=None,
+        default='none',
         type=str,
         help="Load pretrained language model as text tower. See https://www.sbert.net/docs/pretrained_models.html for avaliable models",
     )

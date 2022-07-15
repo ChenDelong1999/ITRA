@@ -67,12 +67,12 @@ class SampleSimilarities(nn.Module):
 
 
 class CompReSS(nn.Module):
-    def __init__(self , args):
+    def __init__(self , args, dim):
         super(CompReSS, self).__init__()
 
         queue_size=128000
         T=0.04
-        teacher_feats_dim, student_feats_dim = args.projection_dim, args.projection_dim
+        teacher_feats_dim, student_feats_dim = dim, dim
 
         self.l2norm = Normalize(2).cuda()
         self.criterion = KLD().cuda()
@@ -93,12 +93,12 @@ class CompReSS(nn.Module):
 
 class CompReSSA(nn.Module):
 
-    def __init__(self, args):
+    def __init__(self, args, dim):
         super(CompReSSA, self).__init__()
 
         queue_size=128000
         T=0.04
-        teacher_feats_dim = args.projection_dim
+        teacher_feats_dim = dim
         
         self.l2norm = Normalize(2).cuda()
         self.criterion = KLD().cuda()

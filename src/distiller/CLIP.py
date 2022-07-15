@@ -2,17 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# class SimReg(nn.Module):
-#     def __init__(self, args) -> None:
-#         super().__init__()
-#         self.MSE = nn.MSELoss()
-    
-#     def forward(self, teacher_feature, student_feature):
-#         return self.MSE(F.normalize(teacher_feature, dim=1), F.normalize(student_feature, dim=1))
-
 
 class CLIPLoss(nn.Module):
-    def __init__(self,args):
+    def __init__(self, args, dim):
         super().__init__()
         self.rank = args.rank
         # cache state

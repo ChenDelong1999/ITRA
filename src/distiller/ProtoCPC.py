@@ -39,7 +39,7 @@ class ce_loss(nn.Module):
         return loss.mean()
 
 class protocpc_loss(nn.Module):
-    def __init__(self, args):
+    def __init__(self, args, dim):
         super().__init__()
 
         out_dim = 65536

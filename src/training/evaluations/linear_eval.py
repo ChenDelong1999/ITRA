@@ -6,7 +6,7 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression as sklearnLogisticRegression
 from torch.utils.data import DataLoader
 from torchvision.datasets import CIFAR10, CIFAR100, STL10, ImageFolder
-from training.data import ImageNet_nori
+from training.data import ImageNet_nori, ImageNet_50k
 from tqdm import tqdm
 import logging
 
@@ -117,9 +117,57 @@ def logistic_regression_pytorch(train_features, train_labels, test_features, tes
 
     return best_acc
         
+@torch.no_grad()
+def knn_classifier(train_features, train_labels, test_features, test_labels, k, T, num_classes=1000):
+    train_features = torch.from_numpy(train_features).cuda()
+    train_labels = torch.from_numpy(train_labels).cuda()
+    test_features = torch.from_numpy(test_features).cuda()
+    test_labels = torch.from_numpy(test_labels).cuda()
+    train_features = nn.functional.normalize(train_features, dim=1, p=2)
+    test_features = nn.functional.normalize(test_features, dim=1, p=2)
+
+    top1, top5, total = 0.0, 0.0, 0
+    train_features = train_features.t()
+    num_test_images, num_chunks = test_labels.shape[0], 100
+    imgs_per_chunk = num_test_images // num_chunks
+    retrieval_one_hot = torch.zeros(k, num_classes).cuda()
+    for idx in range(0, num_test_images, imgs_per_chunk):
+        # get the features for test images
+        features = test_features[
+            idx : min((idx + imgs_per_chunk), num_test_images), :
+        ]
+        targets = test_labels[idx : min((idx + imgs_per_chunk), num_test_images)]
+        batch_size = targets.shape[0]
+
+        # calculate the dot product and compute top-k neighborsresnet18_distill_resnet50-moco-v2-checkpoint_0199.pth.tar
+        similarity = torch.mm(features, train_features)
+        distances, indices = similarity.topk(k, largest=True, sorted=True)
+        candidates = train_labels.view(1, -1).expand(batch_size, -1)
+        retrieved_neighbors = torch.gather(candidates, 1, indices)
+
+        retrieval_one_hot.resize_(batch_size * k, num_classes).zero_()
+        retrieval_one_hot.scatter_(1, retrieved_neighbors.view(-1, 1), 1)
+        distances_transform = distances.clone().div_(T).exp_()
+        probs = torch.sum(
+            torch.mul(
+                retrieval_one_hot.view(batch_size, -1, num_classes),
+                distances_transform.view(batch_size, -1, 1),
+            ),
+            1,
+        )
+        _, predictions = probs.sort(1, True)
+
+        # find the predictions that match the target
+        correct = predictions.eq(targets.data.view(-1, 1))
+        top1 = top1 + correct.narrow(1, 0, 1).sum().item()
+        top5 = top5 + correct.narrow(1, 0, min(5, k)).sum().item()  # top5 does not make sense if k < 5
+        total += targets.size(0)
+    top1 = top1 * 100.0 / total
+    top5 = top5 * 100.0 / total
+    return top1, top5
+
 
 def get_features(model, dataset, args):
-   
     all_features = []
     all_labels = []
     with torch.no_grad():
@@ -137,7 +185,7 @@ def get_features(model, dataset, args):
     return torch.cat(all_features).numpy(), torch.cat(all_labels).numpy()
 
 
-def get_linear_eval_acc(model, dataset_name, root, preprocess, args):
+def get_dataset_features(model, dataset_name, root, preprocess, args):
 
     if dataset_name=='cifar10':
         train = CIFAR10(root, download=True, train=True, transform=preprocess)
@@ -154,6 +202,9 @@ def get_linear_eval_acc(model, dataset_name, root, preprocess, args):
     elif dataset_name=='imagenet':
         train = ImageNet_nori(split='train', transform=preprocess)
         test = ImageNet_nori(split='val', transform=preprocess)
+    elif dataset_name=='imagenet-50k':
+        train = ImageNet_50k(transform=preprocess)
+        test = ImageNet_nori(split='val', transform=preprocess)
     else: 
         train = ImageFolder(f'{args.eval_data_dir}/{dataset_name}/train', transform=preprocess)
         test = ImageFolder(f'{args.eval_data_dir}/{dataset_name}/test', transform=preprocess)
@@ -164,7 +215,10 @@ def get_linear_eval_acc(model, dataset_name, root, preprocess, args):
     train_features, train_labels = get_features(model, train, args=args)
     logging.info(f'extracting featres from {dataset_name} testing set...')
     test_features, test_labels = get_features(model, test, args=args)
+    return train_features, train_labels, test_features, test_labels
 
+
+def get_linear_eval_acc(train_features, train_labels, test_features, test_labels, args):
     if args.linear_prob_mode=='sklearn':
         logging.info('Runing sklearn-based logistic regression')
         classifier = sklearnLogisticRegression(random_state=0, C=0.316, max_iter=1000, verbose=1, n_jobs=128)
@@ -175,8 +229,13 @@ def get_linear_eval_acc(model, dataset_name, root, preprocess, args):
     elif args.linear_prob_mode=='pytorch':
         logging.info('Runing pytorch-based logistic regression')
         accuracy = logistic_regression_pytorch(train_features, train_labels, test_features, test_labels)
-
     return  float(accuracy)
+
+
+def get_knn_acc(train_features, train_labels, test_features, test_labels, args):
+    top1, top5 = knn_classifier(train_features, train_labels, test_features, test_labels, 20, 0.07, num_classes=int(max(train_labels)+1))
+    return  float(top1)
+
 
 
 def linear_eval(model, dataset_names, epoch, preprocess, args):
@@ -189,9 +248,12 @@ def linear_eval(model, dataset_names, epoch, preprocess, args):
     results = {}
     for dataset_name in dataset_names:
         logging.info(f'starting linear evaluation on {dataset_name}...')
-        accuracy = get_linear_eval_acc(model, dataset_name, args.eval_data_dir, preprocess, args)
-        results[f'{dataset_name}-linear-eval-acc'] = accuracy
-        logging.info(f'Finished linear evaluation on  {dataset_name}. accuracy: {accuracy}')
+        train_features, train_labels, test_features, test_labels = get_dataset_features(model, dataset_name, args.eval_data_dir, preprocess, args)
+        linear_acc = get_linear_eval_acc(train_features, train_labels, test_features, test_labels, args)
+        knn_acc = get_knn_acc(train_features, train_labels, test_features, test_labels, args)
+        results[f'{dataset_name}-linear-eval-acc'] = linear_acc
+        results[f'{dataset_name}-knn-eval-acc'] = knn_acc
+        logging.info(f'Finished linear evaluation on  {dataset_name}. Linear accuracy: {linear_acc}, KNN accuracy: {knn_acc}')
 
     return results
 

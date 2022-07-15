@@ -26,20 +26,22 @@ try:
 except ImportError:
     hvd = None
 
-from open_clip import trace_model
+from open_clip import trace_model, create_model_and_transforms, create_transforms, list_models
 from sentence_transformers import SentenceTransformer
 from training.visual_model import get_visual_model_and_preprocess
 
+from seed import models
 # from training.clustering import Clustering
 from training.data import get_data
 from training.distributed import is_master, init_distributed_device, world_info_from_env
 from training.logger import setup_logging
 from training.params import parse_args
 from training.scheduler import cosine_lr
-from training.train import train_one_epoch, feature_extraction_one_epoch
+from training.train import train_one_epoch
 from training.evaluations.evaluation import evaluate
 from training.projection import add_projection_head
 
+from utils import protoseed_utils
 from distiller import get_distiller
 
 
@@ -138,10 +140,65 @@ def main():
     # Build teacher and student
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
+    # === text teacher === #
     logging.info(f'Loading pretrained text transformer as teacher: {args.text_teacher}.')
-    teacher = SentenceTransformer(args.text_teacher)
+    if args.text_teacher!='none':
+        text_teacher = SentenceTransformer(args.text_teacher)
+        if args.text_teacher=='clip-ViT-B-32':
+            args.text_teacher_dim = 512
+        else:   
+            args.text_teacher_dim = text_teacher.get_sentence_embedding_dimension()
+        distiller_text = get_distiller(args.distiller)(args, args.text_teacher_dim).to(args.device)
+    else:
+        text_teacher = None
+        distiller_text = None
+        args.text_teacher_dim = 1
 
-    student, preprocess_train, preprocess_val = get_visual_model_and_preprocess(args)   
+
+    # === image teacher === #
+    #if args.image_teacher in list_models():
+    if args.image_teacher!='none':
+        CLIP_model, preprocess_train, preprocess_val = create_model_and_transforms(
+            args.image_teacher,
+            pretrained='openai',
+            precision=args.precision,
+            device=args.device,
+            jit=args.torchscript,
+            force_quick_gelu=args.force_quick_gelu,
+            args=args
+        )
+        image_teacher = CLIP_model.visual
+        args.image_teacher_dim = 1024 # FIXME
+        distiller_image = get_distiller(args.distiller)(args, args.image_teacher_dim).to(args.device)
+    else:
+        image_teacher = None
+        args.image_teacher_dim = 1
+        distiller_image = None
+
+    # === student === #
+    if args.model in list_models():
+        CLIP_model, preprocess_train, preprocess_val = create_model_and_transforms(
+            args.model,
+            args.pretrained,
+            precision=args.precision,
+            device=args.device,
+            jit=args.torchscript,
+            force_quick_gelu=args.force_quick_gelu,
+            args=args
+        )
+        # CLIP_model created by OpenCLIP has image and text tower,
+        # remove text tower and leave the image tower as student.
+        student = CLIP_model.visual
+    else:
+        pretrained = (args.pretrained=='torchvision')
+        logging.info(f'[torchvision]: loading {args.model} model as student, pretrained={pretrained}')
+        student = models.__dict__[args.model](pretrained=pretrained, num_classes=1000)
+        student.output_dim = student.fc.weight.shape[1]
+        student.fc=torch.nn.Identity()
+        student.to(device=args.device)
+        
+    preprocess_train, preprocess_val = create_transforms(image_size=224, args=args)
+
     if args.freeze_student_backbone:
         for param in student.parameters():
             param.requires_grad = False
@@ -149,20 +206,12 @@ def main():
     student = add_projection_head(student, student.output_dim, args)
 
     if is_master(args):
-        logging.info('student:\n'+str(student))
-        logging.info('teacher:\n'+str(teacher))
+        logging.info('* '*32 + '[student]\n' +str(student))
+        logging.info('* '*32 + '[image_teacher]\n' +str(image_teacher))
+        logging.info('* '*32 + '[text_teacher]\n' +str(text_teacher))
 
     if args.trace:
         student = trace_model(student, batch_size=args.batch_size, device=device)
-
-    if is_master(args):
-        logging.info("Params:")
-        params_file = os.path.join(args.logs, args.name, "params.txt")
-        with open(params_file, "w") as f:
-            for name in sorted(vars(args)):
-                val = getattr(args, name)
-                logging.info(f"  {name}: {val}")
-                f.write(f"{name}: {val}\n")
 
     if args.distributed and not args.horovod:
         if args.use_bn_sync:
@@ -289,10 +338,18 @@ def main():
         logging.debug('Finished loading wandb.')
 
     if 'train' not in data:
-        evaluate(student, teacher, start_epoch, preprocess_val, args, writer)
+        evaluate(student, text_teacher, start_epoch, preprocess_val, args, writer)
         return
+    
+    if is_master(args):
+        logging.info("Params:")
+        params_file = os.path.join(args.logs, args.name, "params.txt")
+        with open(params_file, "w") as f:
+            for name in sorted(vars(args)):
+                val = getattr(args, name)
+                logging.info(f"  {name}: {val}")
+                f.write(f"{name}: {val}\n")
 
-    distiller = get_distiller(args.distiller)(args).to(args.device)
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Start training loop
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -311,7 +368,7 @@ def main():
                 logging.info(f"Randomly select {args.episode_size} samples from full dataset {args.dataset_size} as current episode.")
         
         start = time.time()
-        train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler, distiller, args, writer)
+        train_one_epoch(student, text_teacher, image_teacher, data, epoch, optimizer, scaler, scheduler, distiller_text, distiller_image, args, writer)
         if is_master(args):
             duration = (time.time()-start)/60
             profiling['epsidoe model training time (m)'] = duration
@@ -351,7 +408,7 @@ def main():
                     os.path.join(args.checkpoint_path, f"epoch_latest.pt"),
                 )
 
-        evaluate(student, teacher, completed_epoch, preprocess_val, args, writer)
+        evaluate(student, text_teacher, completed_epoch, preprocess_val, args, writer)
         if args.distributed:
             dist.barrier()
 

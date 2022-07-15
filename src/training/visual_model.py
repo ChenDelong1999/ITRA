@@ -4,13 +4,13 @@ from open_clip import create_model_and_transforms, create_transforms
 from seed.utils import load_simclr_teacher_encoder, load_moco_teacher_encoder, load_swav_teacher_encoder
 
 
-def get_visual_model_and_preprocess(args):
+def get_visual_model_and_preprocess(args, pretrained):
 
     # return a visual nn.module, where model.output_dim stores the feature dimension
     if args.open_clip_model:
         CLIP_model, preprocess_train, preprocess_val = create_model_and_transforms(
             args.model,
-            args.pretrained,
+            pretrained,
             precision=args.precision,
             device=args.device,
             jit=args.torchscript,
@@ -33,7 +33,7 @@ def get_visual_model_and_preprocess(args):
         #     # TODO
         #     student = load_swav_teacher_encoder(args, student, logging, distributed=args.distributed)
         # else:
-        pretrained = (args.pretrained=='torchvision')
+        pretrained = (pretrained=='torchvision')
         logging.info(f'[torchvision]: loading {args.model} model, pretrained={pretrained}')
         student = models.__dict__[args.model](pretrained=pretrained, num_classes=1000)
         student.output_dim = 1000

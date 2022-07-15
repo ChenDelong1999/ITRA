@@ -25,23 +25,28 @@ def add_projection_head(model, input_dim, args):
     # model.image_projection_head = get_projection_head(input_dim, args)
     
     if args.distiller in ['ProtoCPC', 'DINO']:
+        skip_last_layer=False
+    else:
+        skip_last_layer=True
+    
+    if args.image_teacher!='none':
         model.image_projection_head = DINOHead(
             input_dim, 
             65536, 
-            bottleneck_dim=args.projection_dim,
+            bottleneck_dim=args.image_teacher_dim,
             nlayers=args.projection_n_layers, 
-            skip_last_layer=False
-            ).to(args.device)
-        
-    else:
-        model.image_projection_head = DINOHead(
-            input_dim, 
-            -1, 
-            bottleneck_dim=args.projection_dim,
-            nlayers=args.projection_n_layers, 
-            skip_last_layer=True
+            skip_last_layer=skip_last_layer
             ).to(args.device)
 
+    if args.text_teacher!='none':
+        model.text_projection_head = DINOHead(
+            input_dim, 
+            65536, 
+            bottleneck_dim=args.text_teacher_dim,
+            nlayers=args.projection_n_layers, 
+            skip_last_layer=skip_last_layer
+            ).to(args.device)
+        
     return model
 
 class DINOHead(nn.Module):
@@ -87,10 +92,11 @@ class DINOHead(nn.Module):
             if isinstance(m, nn.Linear) and m.bias is not None:
                 nn.init.constant_(m.bias, 0)
 
-    def forward(self, x):
+    def forward(self, x, skip_last_layer=False):
         x = self.mlp(x)
         x = nn.functional.normalize(x, dim=-1, p=2)
-        x = self.last_layer(x)
+        if not skip_last_layer:
+            x = self.last_layer(x)
         return x
 
 

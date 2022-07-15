@@ -23,13 +23,15 @@ from training.evaluations.analyze_features import get_modality_gap
 from utils.training_utils import AverageMeter, unwrap_model
 
 
-def train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler, distiller, args, tb_writer):
+def train_one_epoch(student, text_teacher, image_teacher, data, epoch, optimizer, scaler, scheduler, distiller_text, distiller_image, args, tb_writer):
     device = torch.device(args.device) 
-    
     autocast = torch.cuda.amp.autocast if args.precision == 'amp' else suppress
 
     student.train()
-    teacher.eval()
+    if text_teacher is not None:
+        text_teacher.eval()
+    if image_teacher is not None:
+        image_teacher.eval()
     
     dataloader, sampler = data['train'].dataloader, data['train'].sampler
     if args.distributed and sampler is not None:
@@ -60,38 +62,59 @@ def train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler,
             # # # # # # # # # # # # # # # # # # 
             # Text Teacher forward
             # # # # # # # # # # # # # # # # # # 
-            with torch.no_grad():
-                raw_text_features = teacher.encode(texts, convert_to_tensor=True,  show_progress_bar=False).detach()
-                if args.distiller in ['ProtoCPC', 'DINO']:
-                    prototype = student.module.image_projection_head.last_layer if args.distributed else student.image_projection_head.last_layer
-                    text_features = prototype(raw_text_features)
-                else:
-                    text_features = raw_text_features
+            if text_teacher is not None:
+                with torch.no_grad():
+                    text_features_t = text_teacher.encode(texts, convert_to_tensor=True,  show_progress_bar=False)
+                    if args.distiller in ['ProtoCPC', 'DINO']:
+                        prototype = student.module.text_projection_head.last_layer if args.distributed else student.text_projection_head.last_layer
+                        text_features_t = prototype(text_features_t)
+            
+            # # # # # # # # # # # # # # # # # # 
+            # Image Teacher forward
+            # # # # # # # # # # # # # # # # # # 
+            if image_teacher is not None:
+                with torch.no_grad():
+                    image_features_t = image_teacher(images)
+                    if args.distiller in ['ProtoCPC', 'DINO']:
+                        prototype = student.module.image_projection_head.last_layer if args.distributed else student.image_projection_head.last_layer
+                        image_features_t = prototype(image_features_t)
 
             # # # # # # # # # # # # # # # # # # 
             # Image Student forward
             # # # # # # # # # # # # # # # # # # 
             if args.freeze_student_backbone:
                 with torch.no_grad():
-                    raw_image_features = student(images).detach()
+                    student_features = student(images).detach()
             else:
-                raw_image_features = student(images)
+                student_features = student(images)
             
-            image_features = student.module.image_projection_head(raw_image_features) if args.distributed else student.image_projection_head(raw_image_features)
+            if text_teacher is not None:
+                student_features_text = student.module.text_projection_head(student_features) if args.distributed else student.text_projection_head(student_features)
+                text_loss = distiller_text(text_features_t, student_features_text)
+            else:
+                text_loss = 0
+
+            if image_teacher is not None:
+                student_features_image = student.module.image_projection_head(student_features) if args.distributed else student.image_projection_head(student_features)  
+                image_loss = distiller_image(image_features_t, student_features_image)
+            else:
+                image_loss = 0
+            
+            total_loss = text_loss + image_loss
             
             # # # # # # # # # # # # # # # # # # 
             # loss backward
             # # # # # # # # # # # # # # # # # # 
-            if args.distributed:
-                all_image_features, all_text_features = gather_features(
-                    image_features, text_features,
-                    args.local_loss, args.gather_with_grad, 
-                    args.rank, args.world_size, args.horovod
-                    )
-            else:
-                all_image_features, all_text_features = image_features, text_features
+            # FIXME: gather skiped. InfoNCE will degenerate
+            # if args.distributed:
+            #     all_image_features, all_text_features = gather_features(
+            #         image_features, text_features,
+            #         args.local_loss, args.gather_with_grad, 
+            #         args.rank, args.world_size, args.horovod
+            #         )
+            # else:
+            #     all_image_features, all_text_features = image_features, text_features
             
-            total_loss = distiller(all_text_features, all_image_features)
 
         if scaler is not None:
             scaler.scale(total_loss).backward()
@@ -130,16 +153,12 @@ def train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler,
             )
             
             # Save train loss / etc. Using non avg meter values as loggers have their own smoothing
-            feature_std_image = torch.std(F.normalize(all_image_features, dim=1), dim=0).mean().item()
-            feature_std_text = torch.std(F.normalize(all_text_features, dim=1), dim=0).mean().item()
             log_data = {
-                "total_loss": total_loss.item(),
+                "loss-total": total_loss.item(),
+                "loss-image": image_loss.item() if image_teacher is not None else 0,
+                "loss-text": text_loss.item() if text_teacher is not None else 0,
                 "learning_rate": optimizer.param_groups[0]["lr"],
                 "gradient-norm": norm,
-                "feature_std_ratio": feature_std_image/feature_std_text,
-                "feature_std_image": feature_std_image,
-                "feature_std_text": feature_std_text,
-                #"feature_modality_gap": get_modality_gap(image_features, text_features),
             }
             profiling = {
                 "batch data time (s)": data_time_m.val,
@@ -161,62 +180,6 @@ def train_one_epoch(student, teacher, data, epoch, optimizer, scaler, scheduler,
                 if args.wandb:
                     assert wandb is not None, 'Please install wandb.'
                     wandb.log({name: val, 'step': step})
-
-            # resetting batch / data time meters per log window
-            batch_time_m.reset()
-            data_time_m.reset()
-
-# TODO: feature extraction for teacher-student is not implemented yet
-def feature_extraction_one_epoch(model, data, epoch, optimizer, scaler, scheduler, clustering, args, tb_writer=None):
-    device = torch.device(args.device)
-    autocast = torch.cuda.amp.autocast if args.precision == 'amp' else suppress
-
-    model.eval()
-
-    dataloader, sampler = data['train'].dataloader, data['train'].sampler
-    if args.distributed and sampler is not None:
-        sampler.set_epoch(epoch)
-    num_batches_per_epoch = dataloader.num_batches
-    sample_digits = math.ceil(math.log(dataloader.num_samples + 1, 10))
-
-    batch_time_m = AverageMeter()
-    data_time_m = AverageMeter()
-    end = time.time()
-    for i, batch in enumerate(dataloader):
-
-        indexs, images, texts = batch
-        indexs = indexs.to(device=device, non_blocking=True)
-        images = images.to(device=device, non_blocking=True)
-        texts = texts.to(device=device, non_blocking=True)
-
-        data_time_m.update(time.time() - end)
-
-        # forward propagation
-        with autocast():
-            with torch.no_grad():
-                image_features, text_features, image_features_projected, text_features_projected, logit_scale, logit_scale_proto = model(images, texts)
-        
-        # cache features
-        indexs = get_gathered_item(indexs, args)
-        image_features_projected = get_gathered_item(image_features_projected, args)
-        text_features_projected = get_gathered_item(text_features_projected, args)
-        if is_master(args):
-            clustering.load_batch(indexs, image_features_projected, text_features_projected)
-        
-        batch_time_m.update(time.time() - end)
-        end = time.time()
-        batch_count = i + 1
-        if is_master(args) and (i % 100 == 0 or batch_count == num_batches_per_epoch):
-            batch_size = len(images)
-            num_samples = batch_count * batch_size * args.world_size
-            samples_per_epoch = dataloader.num_samples
-            percent_complete = 100.0 * batch_count / num_batches_per_epoch
-
-            logging.info(
-                f"Feature extraction: {epoch+1}/{args.epochs} [{num_samples:>{sample_digits}}/{samples_per_epoch} ({percent_complete:.0f}%)] "
-                f"Data (t): {data_time_m.avg:.3f} "
-                f"Batch (t): {batch_time_m.avg:.3f} "
-            )
 
             # resetting batch / data time meters per log window
             batch_time_m.reset()

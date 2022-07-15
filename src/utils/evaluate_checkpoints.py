@@ -25,9 +25,11 @@ def evaluate_checkpoint(checkpoint_path, epoch, args):
      
     student, preprocess_train, preprocess_val = get_visual_model_and_preprocess(args)   
     student = add_projection_head(student, student.output_dim, args)
+    student = student.to(device)
 
     teacher = SentenceTransformer(args.pretrained_text)
     teacher.to(device=args.device)
+    teacher = teacher.to(device)
 
     checkpoint = torch.load(checkpoint_path, map_location=device)
     sd = checkpoint["state_dict"]
@@ -36,8 +38,6 @@ def evaluate_checkpoint(checkpoint_path, epoch, args):
     student.load_state_dict(sd)
     logging.info(f"=> Loaded checkpoint '{checkpoint_path}' (epoch {checkpoint['epoch']})")  
     
-    student = student.to(device)
-    teacher = teacher.to(device)
     
     metrics = evaluate(student, teacher, epoch, preprocess_val, args, tb_writer=None, fast_evaluation=False)    
     return metrics

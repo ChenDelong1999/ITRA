@@ -4,14 +4,30 @@ cd /data/codes/ProtoRKD
 export PYTHONPATH="src"
 torchrun --nproc_per_node 4 -m training.main \
     --dataset-size 2500000 --episode-size 0 --train-data 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv' \
-    --epochs 16 --save-frequency 4 --batch-size 100 --workers 8 \
+    --epochs 64 --save-frequency 4 --batch-size 128 --workers 8 \
     --linear-frequency 1  --zeroshot-frequency 1 --retrieval-frequency 1  --eval-data-dir '/data/Datasets' \
-    --lr 5e-5 --warmup 2000 --wd 0.1 --max-grad-norm 10 \
+    --lr 1e-4 --warmup 2000 --wd 0.1 --max-grad-norm 100 \
     --projection-n-layers 3 \
-    --model RN50 --open-clip-model \
-    --text-teacher 'all-mpnet-base-v2' --projection-dim 768 \
+    --model resnet18 \
+    --text-teacher 'all-mpnet-base-v2' --image-teacher 'none' \
     --distiller 'SEED' \
-    --report-to tensorboard --logs logs/exp7_baselines --copy-codebase --name 'T[mpnet]_S[RN50]_[SEED]_bs400_lr5e-5_16ep(CC2.5M)'
+    --report-to tensorboard --logs logs/exp8_ensemble --copy-codebase --name 'Tt[all-mpnet-base-v2]_Ti[none]_S[resnet18]_[SEED]_bs1024_lr1e-4_64ep(CC2.5M)'
+"""
+
+""" 4x2080ti  Ensemble distillation templet, DON'T MODIFY!!!
+conda activate protoclip
+cd /data/codes/ProtoRKD
+export PYTHONPATH="src"
+torchrun --nproc_per_node 4 -m training.main \
+    --dataset-size 2500000 --episode-size 0 --train-data 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv' \
+    --epochs 64 --save-frequency 4 --batch-size 128 --workers 8 \
+    --linear-frequency 1  --zeroshot-frequency 1 --retrieval-frequency 1  --eval-data-dir '/data/Datasets' \
+    --lr 1e-4 --warmup 2000 --wd 0.1 --max-grad-norm 100 \
+    --projection-n-layers 3 \
+    --model resnet18 \
+    --text-teacher 'clip-ViT-B-32' --image-teacher 'RN50' \
+    --distiller 'SEED' \
+    --report-to tensorboard --logs logs/exp8_ensemble --copy-codebase --name 'Tt[clip-ViT-B-32]_Ti[RN50]_S[resnet18]_[SEED]_bs1024_lr1e-4_64ep(CC2.5M)'
 """
 
 
@@ -23,12 +39,16 @@ torchrun --nproc_per_node 4 -m training.main \
     --train-data 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv' \
     --train-data 's3://chendelonghahab/datasets/YFCC/YFCC_cleaned_nori.csv' \
 
-# [Teachers]
+# [Text Teachers]
     --text-teacher 'all-mpnet-base-v2' --projection-dim 768 \
     --text-teacher 'average_word_embeddings_glove.6B.300d' --projection-dim 300 \
     --text-teacher 'clip-ViT-B-32'  --projection-dim 512 \
     --text-teacher 'clip-ViT-B-16'  --projection-dim ? \
     --text-teacher 'clip-ViT-L-14'  --projection-dim ? \
+
+# [Image Teachers]
+    --image-teacher 'RN50'
+    --image-teacher 'resnet50'
 
 # [Students]
 ## OpenCLIP model

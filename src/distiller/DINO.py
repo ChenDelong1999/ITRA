@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import torch.distributed as dist
 
 class DINOLoss(nn.Module):
-    def __init__(self, args):
+    def __init__(self, args, dim):
         super().__init__()
         
         out_dim = 65536

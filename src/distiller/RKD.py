@@ -7,7 +7,7 @@ class RKD(nn.Module):
     https://github.com/megvii-research/mdistiller/blob/255c16fc32882a697bfd35569307380090562b2c/mdistiller/distillers/RKD.py#L21
     
     '''
-    def __init__(self, args) -> None:
+    def __init__(self, args, dim) -> None:
         super().__init__()    
         self.squared = False
         self.args = args

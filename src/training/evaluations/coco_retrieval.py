@@ -85,10 +85,6 @@ def coco_retrieval_evaluation(student, teacher, epoch, preprocess, args):
     with torch.no_grad():
         logging.info('extracting COCO text features...')
         all_text_features = []
-        if args.add_teacher_projection_head:
-            text_projection_head = student.module.text_projection_head if args.distributed else student.text_projection_head
-        else:
-            text_projection_head = torch.nn.Identity()
             
         for texts in tqdm.tqdm(coco_retrieval_text_dataloader):
             text_features = teacher.encode(
@@ -96,7 +92,6 @@ def coco_retrieval_evaluation(student, teacher, epoch, preprocess, args):
                 convert_to_tensor=True, 
                 show_progress_bar=False
                 )
-            text_features = text_projection_head(text_features)
             text_features = text_features.detach().cpu()
             all_text_features.append(text_features)
         all_text_features = torch.cat(all_text_features,dim=0)
@@ -108,10 +103,10 @@ def coco_retrieval_evaluation(student, teacher, epoch, preprocess, args):
 
             if args.distributed and not args.horovod:
                 image_features = student.module(images)
-                image_features = student.module.image_projection_head(image_features).detach().cpu()
+                image_features = student.module.text_projection_head(image_features, skip_last_layer=True).detach().cpu()
             else:
                 image_features = student(images)
-                image_features = student.image_projection_head(image_features).detach().cpu()
+                image_features = student.text_projection_head(image_features, skip_last_layer=True).detach().cpu()
                 
             all_image_features.append(image_features)
         all_image_features = torch.cat(all_image_features,dim=0)

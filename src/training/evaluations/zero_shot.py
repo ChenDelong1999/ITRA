@@ -16,7 +16,7 @@ from training.data import ImageNet_nori
 from open_clip import tokenize as clip_tokenizer
 
 
-def zero_shot_classifier(teacher, text_projection_head, classnames, templates):
+def zero_shot_classifier(teacher, classnames, templates):
     with torch.no_grad():
         zeroshot_weights = []
         for classname in classnames:
@@ -26,7 +26,6 @@ def zero_shot_classifier(teacher, text_projection_head, classnames, templates):
                 convert_to_tensor=True, 
                 show_progress_bar=False
                 )
-            class_embeddings = text_projection_head(class_embeddings)
             class_embeddings = class_embeddings.mean(dim=0)
             class_embedding = F.normalize(class_embeddings, dim=-1)
             class_embedding /= class_embedding.norm()
@@ -51,10 +50,10 @@ def run(student, classifier, dataloader, args):
 
             if args.distributed and not args.horovod:
                 image_features = student.module(images)
-                image_features = student.module.image_projection_head(image_features)
+                image_features = student.module.text_projection_head(image_features, skip_last_layer=True)
             else:
                 image_features = student(images)
-                image_features = student.image_projection_head(image_features)
+                image_features = student.text_projection_head(image_features, skip_last_layer=True)
 
             image_features = F.normalize(image_features, dim=-1)
             image_features = image_features.detach().cpu()
@@ -139,11 +138,8 @@ def zero_shot_eval(student, teacher, zeroshot_dataset, epoch, preprocess, args):
         empty_indexs = [46, 66, 123, 299, 302, 351, 403, 436, 465]
         for empty_index in empty_indexs[::-1]:
             del classnames[empty_index]
-    if args.add_teacher_projection_head:
-        text_projection_head = student.module.text_projection_head if args.distributed else student.text_projection_head
-    else:
-        text_projection_head = torch.nn.Identity()
-    classifier = zero_shot_classifier(teacher, text_projection_head, classnames, prompt_templates)
+    
+    classifier = zero_shot_classifier(teacher, classnames, prompt_templates)
 
     logging.info(f'Calculating image features for {zeroshot_dataset}')
     results = {}
