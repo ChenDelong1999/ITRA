@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 from sentence_transformers import SentenceTransformer
 #from openTSNE import TSNE
 from training.visual_model import get_visual_model_and_preprocess
+from seed import models
+from open_clip import trace_model, create_model_and_transforms, create_transforms, list_models
 
 import torch.nn.functional as F
 # to disable warning "huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks..."
@@ -209,7 +211,7 @@ def show_tsne(image_backbone_features, image_features, text_features, file_name,
     plt.yticks([])
     plt.title('text features')
     if labels is None:
-        plt.scatter(tsne_text[:,0], tsne_text[:,1], s=1.5, c='red', alpha=0.8)
+        plt.scatter(tsne_text[:,0], tsne_text[:,1], s=1.5, c='blue', alpha=0.8)
     else:
         plt.scatter(tsne_text[:,0], tsne_text[:,1], s=1.5, c=labels, cmap='tab10', alpha=0.8)
     
@@ -227,18 +229,14 @@ def extract_feature(student, teacher, dataset_CC, args):
     all_text_features = []
     for (index, images, texts) in tqdm(dataloader_CC):
         with torch.no_grad():
-            raw_text_features = teacher.encode(
+            text_features = teacher.encode(
                     texts,
                     convert_to_tensor=True, 
                     show_progress_bar=False
                     ).detach()
-            if args.add_teacher_projection_head:
-                text_features = student.text_projection_head(raw_text_features) + raw_text_features if args.res_teacher_projection else student.text_projection_head(raw_text_features)
-            else:
-                text_features = raw_text_features
 
             raw_image_features = student(images.cuda())    
-            image_features = student.image_projection_head(raw_image_features)      
+            image_features = student.text_projection_head(raw_image_features)      
         
         raw_image_features = F.normalize(raw_image_features, dim=1)
         image_features = F.normalize(image_features, dim=1)
@@ -249,8 +247,8 @@ def extract_feature(student, teacher, dataset_CC, args):
         all_text_features.append(text_features)
     
     all_image_backbone_features = torch.stack(all_image_backbone_features).view(-1, all_image_backbone_features[0].size(-1))
-    all_image_features = torch.stack(all_image_features).view(-1, args.projection_dim)
-    all_text_features = torch.stack(all_text_features).view(-1, args.projection_dim)
+    all_image_features = torch.stack(all_image_features).view(-1, all_image_features[0].size(-1))
+    all_text_features = torch.stack(all_text_features).view(-1, all_text_features[0].size(-1))
 
     return all_image_backbone_features.cpu(), all_image_features.cpu(), all_text_features.cpu()
 
@@ -258,27 +256,43 @@ def extract_feature(student, teacher, dataset_CC, args):
 def evaluate_checkpoint(checkpoint_path, epoch, args):
     # load model
     
-    logging.info(f'Loading pretrained text trasformer teacher: {args.pretrained_text}.')
+    logging.info(f'Loading pretrained text trasformer teacher: {args.text_teacher}.')
      
-    student, preprocess_train, preprocess_val = get_visual_model_and_preprocess(args)   
+    text_teacher = SentenceTransformer(args.text_teacher).to(device)
+    if args.text_teacher=='clip-ViT-B-32':
+        args.text_teacher_dim = 512
+    else:   
+        args.text_teacher_dim = text_teacher.get_sentence_embedding_dimension()
+
+    # === student === #
+    if args.model in list_models():
+        CLIP_model, preprocess_train, preprocess_val = create_model_and_transforms(
+            args.model,
+            args.pretrained,
+            precision=args.precision,
+            device=args.device,
+            jit=args.torchscript,
+            force_quick_gelu=args.force_quick_gelu,
+            args=args
+        )
+        # CLIP_model created by OpenCLIP has image and text tower,
+        # remove text tower and leave the image tower as student.
+        student = CLIP_model.visual
+    else:
+        pretrained = (args.pretrained=='torchvision')
+        logging.info(f'[torchvision]: loading {args.model} model as student, pretrained={pretrained}')
+        student = models.__dict__[args.model](pretrained=pretrained, num_classes=1000)
+        student.output_dim = student.fc.weight.shape[1]
+        student.fc=torch.nn.Identity()
+        student.to(device=args.device)
+        
+    preprocess_train, preprocess_val = create_transforms(image_size=224, args=args)
     student = add_projection_head(student, student.output_dim, args)
-
-    teacher = SentenceTransformer(args.pretrained_text)
-    teacher.to(device=args.device)
-
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    sd = checkpoint["state_dict"]
-    if not args.distributed and next(iter(sd.items()))[0].startswith('module'):
-        sd = {k[len('module.'):]: v for k, v in sd.items()}
-    student.load_state_dict(sd)
-    logging.info(f"=> Loaded checkpoint '{checkpoint_path}' (epoch {checkpoint['epoch']})")  
-    
     student = student.to(device)
-    teacher = teacher.to(device)
 
-    # Conceptual Captions
+    #Conceptual Captions
     dataset_CC = CsvDataset(args.input_filename, preprocess_val, dataset_size=args.num_points)
-    image_backbone_features, image_features, text_features = extract_feature(student, teacher, dataset_CC, args)
+    image_backbone_features, image_features, text_features = extract_feature(student, text_teacher, dataset_CC, args)
     show_tsne(
         image_backbone_features, image_features, text_features, 
         file_name=os.path.join(args.exp_dir, 'visualization', f'tsne(CC-{len(dataset_CC)})_epoch_{epoch}.png'), 
@@ -286,7 +300,8 @@ def evaluate_checkpoint(checkpoint_path, epoch, args):
     
     # ImageNet
     dataset_ImageNet = ImageNet_nori(transform=preprocess_val, split='val')
-    image_backbone_features, image_features, text_features  = extract_feature(student, teacher, dataset_ImageNet, args)
+    image_backbone_features, image_features, text_features  = extract_feature(student, text_teacher, dataset_ImageNet, args)
+    print(image_backbone_features.size(), image_features.size(), text_features.size())
     show_tsne(
         image_backbone_features, image_features, text_features, 
         file_name=os.path.join(args.exp_dir, 'visualization', f'tsne(ImageNet-val)_epoch_{epoch}.png'), 

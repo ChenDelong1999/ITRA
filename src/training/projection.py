@@ -46,8 +46,20 @@ def add_projection_head(model, input_dim, args):
             nlayers=args.projection_n_layers, 
             skip_last_layer=skip_last_layer
             ).to(args.device)
-        
+    
     return model
+
+
+def get_adaption_head(args):
+    projection_head = DINOHead(
+            args.text_teacher_dim, 
+            1, 
+            bottleneck_dim=args.text_teacher_dim,
+            nlayers=args.projection_n_layers, 
+            skip_last_layer=True
+            ).to(args.device)
+    return projection_head
+
 
 class DINOHead(nn.Module):
     def __init__(self, in_dim, out_dim, weight_norm_=True, act='gelu', use_bn=False, nlayers=3, hidden_dim=2048, bottleneck_dim=256, skip_last_layer=False):

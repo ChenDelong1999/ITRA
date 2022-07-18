@@ -9,26 +9,10 @@ torchrun --nproc_per_node 4 -m training.main \
     --lr 1e-4 --warmup 2000 --wd 0.1 --max-grad-norm 100 \
     --model resnet18  --projection-n-layers 3 \
     --text-teacher 'all-mpnet-base-v2' --image-teacher 'none' \
-    --distiller 'SEED' \
-    --report-to tensorboard --logs logs/exp8_ensemble --copy-codebase --name 'Tt[all-mpnet-base-v2]_Ti[none]_S[resnet18]_[SEED]_bs512_lr1e-4_64ep(CC2.5M)'
+    --distiller 'InfoNCE' \
+    --report-to tensorboard --logs logs/exp9_adaptive_head --copy-codebase --name 'Tt[all-mpnet-base-v2]_Ti[none]_S[resnet18]_[InfoNCE]_bs512_lr1e-4_64ep(CC2.5M)'
 """
 
-""" 8x2080ti standard templet, DON'T MODIFY!!!
-conda activate protoclip
-cd /data/codes/ProtoRKD
-export PYTHONPATH="src"
-torchrun --nproc_per_node 8 -m training.main \
-    --dataset-size 2500000 --episode-size 0 --train-data 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv' \
-    --epochs 128 --save-frequency 4 --batch-size 320 --workers 8 \
-    --linear-frequency 4  --zeroshot-frequency 4 --retrieval-frequency 4  --eval-data-dir '/data/Datasets' \
-    --lr 1e-3 --warmup 2000 --wd 0.1 --max-grad-norm 100  \
-    --model resnet18 --projection-n-layers 3  \
-    --text-teacher 'all-mpnet-base-v2' --image-teacher 'none' \
-    --distiller 'SEED' \
-    --report-to tensorboard --logs logs/exp8_ensemble --copy-codebase --name 'Tt[all-mpnet-base-v2]_Ti[none]_S[resnet18]_[SEED]_bs2560_lr1e-3_128ep(CC2.5M)'
-"""
-
-""" 4x2080ti  Ensemble distillation templet, DON'T MODIFY!!!
 conda activate protoclip
 cd /data/codes/ProtoRKD
 export PYTHONPATH="src"
@@ -37,36 +21,12 @@ torchrun --nproc_per_node 4 -m training.main \
     --epochs 64 --save-frequency 4 --batch-size 128 --workers 8 \
     --linear-frequency 1  --zeroshot-frequency 1 --retrieval-frequency 1  --eval-data-dir '/data/Datasets' \
     --lr 1e-4 --warmup 2000 --wd 0.1 --max-grad-norm 100 \
-    --model resnet18 --projection-n-layers 3 \
-    --text-teacher 'clip-ViT-B-32' --image-teacher 'RN50' \
-    --distiller 'SEED' \
-    --report-to tensorboard --logs logs/exp8_ensemble --copy-codebase --name 'Tt[clip-ViT-B-32]_Ti[RN50]_S[resnet18]_[SEED]_bs512_lr1e-4_64ep(CC2.5M)'
-"""
-conda activate protoclip
-cd /data/codes/ProtoRKD
-export PYTHONPATH="src"
-torchrun --nproc_per_node 4 -m training.main \
-    --dataset-size 2500000 --episode-size 0 --train-data 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv' \
-    --epochs 64 --save-frequency 4 --batch-size 128 --workers 8 \
-    --linear-frequency 1  --zeroshot-frequency 1 --retrieval-frequency 1  --eval-data-dir '/data/Datasets' \
-    --lr 1e-3 --warmup 2000 --wd 0.1 --max-grad-norm 100 \
     --model resnet18  --projection-n-layers 3 \
     --text-teacher 'all-mpnet-base-v2' --image-teacher 'none' \
-    --distiller 'SEED' \
-    --report-to tensorboard --logs logs/exp8_ensemble --copy-codebase --name 'Tt[all-mpnet-base-v2]_Ti[none]_S[resnet18]_[SEED]_bs512_lr1e-3_64ep(CC2.5M)'
-  
-conda activate protoclip
-cd /data/codes/ProtoRKD
-export PYTHONPATH="src"
-torchrun --nproc_per_node 8 -m training.main \
-    --dataset-size 2500000 --episode-size 0 --train-data 's3://chendelonghahab/datasets/YFCC/YFCC_cleaned_nori.csv' \
-    --epochs 1280 --save-frequency 16 --batch-size 320 --workers 8 \
-    --linear-frequency 4  --zeroshot-frequency 4 --retrieval-frequency 4  --eval-data-dir '/data/Datasets' \
-    --lr 1e-3 --warmup 2000 --wd 0.1 --max-grad-norm 100  \
-    --model resnet18 --projection-n-layers 3  \
-    --text-teacher 'all-mpnet-base-v2' --image-teacher 'none' \
-    --distiller 'SEED' \
-    --report-to tensorboard --logs logs/exp8_ensemble --copy-codebase --name 'Tt[clip-ViT-B-32]_Ti[none]_S[resnet18]_[SEED]_bs2560_lr1e-3_1280ep(YFCC2.5M)'
+    --distiller 'InfoNCE' --adaption-head --quiting-power 2 --base-panalty-weight 1e-3 --final-panalty-weight 1 \
+    --report-to tensorboard --logs logs/exp9_adaptive_head --copy-codebase --name 'Tt[all-mpnet-base-v2-adapt[1e-3,1]^2]_Ti[none]_S[resnet18]_[InfoNCE]_bs512_lr1e-4_64ep(CC2.5M)'
+
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 

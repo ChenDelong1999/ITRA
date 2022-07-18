@@ -36,14 +36,15 @@ from training.data import get_data
 from training.distributed import is_master, init_distributed_device, world_info_from_env
 from training.logger import setup_logging
 from training.params import parse_args
-from training.scheduler import cosine_lr
+from training.scheduler import cosine_lr, cosine_wd
 from training.train import train_one_epoch
 from training.evaluations.evaluation import evaluate
-from training.projection import add_projection_head
+from training.projection import add_projection_head, get_adaption_head
 
 from utils import protoseed_utils
 from distiller import get_distiller
 
+import matplotlib.pyplot as plt
 
 # to disable warning "huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks..."
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -135,7 +136,6 @@ def main():
     else:
         logging.info(f'Running with a single process. Device {args.device}.')
 
-    
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Build teacher and student
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -153,6 +153,11 @@ def main():
         text_teacher = None
         distiller_text = None
         args.text_teacher_dim = 1
+    
+    if args.adaption_head:
+        adaption_head = get_adaption_head(args)
+    else:
+        adaption_head = None
 
 
     # === image teacher === #
@@ -209,6 +214,7 @@ def main():
         logging.info('* '*32 + '[student]\n' +str(student))
         logging.info('* '*32 + '[image_teacher]\n' +str(image_teacher))
         logging.info('* '*32 + '[text_teacher]\n' +str(text_teacher))
+        logging.info('* '*32 + '[adaption_head]\n' +str(adaption_head))
 
     if args.trace:
         student = trace_model(student, batch_size=args.batch_size, device=device)
@@ -226,6 +232,28 @@ def main():
             broadcast_buffers=False,
             **ddp_args, 
         )
+
+    
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    # initialize datasets
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    if args.episode_size!=0:
+        args.episodic_training=True
+        index_mapping = torch.arange(args.episode_size).share_memory_()
+        if is_master(args):
+            logging.info(f"Model will be trained with episodic training strategy (episodic size={args.episode_size}).")
+    else:
+        args.episodic_training=False
+        index_mapping = None
+        if is_master(args):
+            logging.info(f"Model will be trained with epoch-wise training strategy.")
+
+    data = get_data(args, (preprocess_train, preprocess_val), index_mapping=index_mapping)
+
+    if args.train_data is not None and args.dataset_size is None:
+        args.dataset_size = len(data['train'].dataset.captions)
+    if not args.episodic_training:
+        args.episode_size = args.dataset_size
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # create optimizer and scaler
@@ -257,6 +285,30 @@ def main():
 
         scaler = GradScaler() if args.precision == "amp" else None
 
+        scheduler = None
+        if 'train' in data and optimizer is not None:
+            total_steps = data["train"].dataloader.num_batches * args.epochs
+            scheduler = cosine_lr(optimizer, args.lr, args.warmup, total_steps)
+
+        # if use gradually disappering adaptive teacher projection head
+        if args.adaption_head:
+          
+            adaption_head_optimizer = optim.AdamW(
+                [{"params": adaption_head.parameters(), "weight_decay": args.wd}],
+                lr=args.lr,
+                betas=(args.beta1, args.beta2),
+                eps=args.eps,
+            )
+            panalty_scheduler = cosine_wd(base_value=args.base_panalty_weight, final_value=args.final_panalty_weight, power=args.quiting_power, total_step=args.epochs * data["train"].dataloader.num_batches)
+            if is_master(args):
+                fig_path = os.path.join(args.visualization_path, 'panalty_scheduler.png')
+                plt.plot(panalty_scheduler)
+                plt.savefig(fig_path)
+                logging.info(f'panalty_scheduler (graph saved to {fig_path}):\n'+str(panalty_scheduler))
+        else:
+            adaption_head_optimizer = None
+            panalty_scheduler=None
+
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # optionally resume from a checkpoint
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -283,34 +335,6 @@ def main():
         else:
             logging.info("=> no checkpoint found at '{}'".format(args.resume))
 
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    # initialize datasets
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    if args.episode_size!=0:
-        args.episodic_training=True
-        index_mapping = torch.arange(args.episode_size).share_memory_()
-        if is_master(args):
-            logging.info(f"Model will be trained with episodic training strategy (episodic size={args.episode_size}).")
-    else:
-        args.episodic_training=False
-        index_mapping = None
-        if is_master(args):
-            logging.info(f"Model will be trained with epoch-wise training strategy.")
-
-    data = get_data(args, (preprocess_train, preprocess_val), index_mapping=index_mapping)
-
-    if args.train_data is not None and args.dataset_size is None:
-        args.dataset_size = len(data['train'].dataset.captions)
-    if not args.episodic_training:
-        args.episode_size = args.dataset_size
-
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    # create scheduler if train
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    scheduler = None
-    if 'train' in data and optimizer is not None:
-        total_steps = data["train"].dataloader.num_batches * args.epochs
-        scheduler = cosine_lr(optimizer, args.lr, args.warmup, total_steps)
         
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # determine if this worker should save logs and checkpoints. only do so if it is rank == 0
@@ -368,7 +392,12 @@ def main():
                 logging.info(f"Randomly select {args.episode_size} samples from full dataset {args.dataset_size} as current episode.")
         
         start = time.time()
-        train_one_epoch(student, text_teacher, image_teacher, data, epoch, optimizer, scaler, scheduler, distiller_text, distiller_image, args, writer)
+        train_one_epoch(
+            student, text_teacher, image_teacher, 
+            data, epoch, optimizer, scaler, scheduler, 
+            distiller_text, distiller_image, args, writer, 
+            adaption_head=adaption_head, adaption_head_optimizer=adaption_head_optimizer, panalty_scheduler=panalty_scheduler
+            )
         if is_master(args):
             duration = (time.time()-start)/60
             profiling['epsidoe model training time (m)'] = duration

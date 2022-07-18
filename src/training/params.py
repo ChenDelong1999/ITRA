@@ -50,6 +50,27 @@ def parse_args():
         type=str,
         help="Load pretrained language model as text tower. See https://www.sbert.net/docs/pretrained_models.html for avaliable models",
     )
+    # quiting adaption
+    parser.add_argument(
+        "--adaption-head",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--quiting-power",
+        type=int,
+        default=2,
+    )
+    parser.add_argument(
+        "--final-panalty-weight",
+        type=float,
+        default=1000,
+    )
+    parser.add_argument(
+        "--base-panalty-weight",
+        type=float,
+        default=1e-3,
+    )
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Data and Episodic training
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
