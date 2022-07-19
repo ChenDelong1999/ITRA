@@ -55,7 +55,7 @@ def get_adaption_head(args):
             args.text_teacher_dim, 
             1, 
             bottleneck_dim=args.text_teacher_dim,
-            nlayers=args.projection_n_layers, 
+            nlayers=args.adaption_n_layers, 
             skip_last_layer=True
             ).to(args.device)
     return projection_head

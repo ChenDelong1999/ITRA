@@ -143,8 +143,9 @@ def main():
     # === text teacher === #
     logging.info(f'Loading pretrained text transformer as teacher: {args.text_teacher}.')
     if args.text_teacher!='none':
-        text_teacher = SentenceTransformer(args.text_teacher)
-        if args.text_teacher=='clip-ViT-B-32':
+        text_teacher = SentenceTransformer(args.text_teacher, device=args.device).to(args.device)
+        text_teacher.max_seq_length = 77
+        if args.text_teacher in ['clip-ViT-B-32', 'clip-ViT-B-16']:
             args.text_teacher_dim = 512
         else:   
             args.text_teacher_dim = text_teacher.get_sentence_embedding_dimension()
@@ -284,29 +285,35 @@ def main():
             hvd.broadcast_optimizer_state(optimizer, root_rank=0)
 
         scaler = GradScaler() if args.precision == "amp" else None
-
-        scheduler = None
-        if 'train' in data and optimizer is not None:
-            total_steps = data["train"].dataloader.num_batches * args.epochs
-            scheduler = cosine_lr(optimizer, args.lr, args.warmup, total_steps)
+        total_steps = data["train"].dataloader.num_batches * args.epochs
+        scheduler = cosine_lr(optimizer, args.lr, args.warmup, total_steps)
 
         # if use gradually disappering adaptive teacher projection head
-        if args.adaption_head:
-          
-            adaption_head_optimizer = optim.AdamW(
-                [{"params": adaption_head.parameters(), "weight_decay": args.wd}],
-                lr=args.lr,
+        if args.adaption_head or args.unlock_text_teacher:
+            params = []
+            if args.adaption_head:
+                params.append({"params": adaption_head.parameters(), "weight_decay": args.wd})
+            if args.unlock_text_teacher:
+                params.append({"params": text_teacher.parameters(), "weight_decay": 1e-4})
+            text_teacher_optimizer = optim.AdamW(
+                params=params,
+                lr=args.text_lr,
                 betas=(args.beta1, args.beta2),
                 eps=args.eps,
             )
             panalty_scheduler = cosine_wd(base_value=args.base_panalty_weight, final_value=args.final_panalty_weight, power=args.quiting_power, total_step=args.epochs * data["train"].dataloader.num_batches)
+            
+            
+            text_teacher_scheduler = cosine_lr(text_teacher_optimizer, args.text_lr, args.warmup, total_steps)
+            
             if is_master(args):
                 fig_path = os.path.join(args.visualization_path, 'panalty_scheduler.png')
                 plt.plot(panalty_scheduler)
                 plt.savefig(fig_path)
                 logging.info(f'panalty_scheduler (graph saved to {fig_path}):\n'+str(panalty_scheduler))
         else:
-            adaption_head_optimizer = None
+            text_teacher_optimizer = None
+            text_teacher_scheduler = None
             panalty_scheduler=None
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -394,9 +401,9 @@ def main():
         start = time.time()
         train_one_epoch(
             student, text_teacher, image_teacher, 
-            data, epoch, optimizer, scaler, scheduler, 
+            data, epoch, optimizer, scaler, scheduler, text_teacher_scheduler, 
             distiller_text, distiller_image, args, writer, 
-            adaption_head=adaption_head, adaption_head_optimizer=adaption_head_optimizer, panalty_scheduler=panalty_scheduler
+            adaption_head=adaption_head, text_teacher_optimizer=text_teacher_optimizer, panalty_scheduler=panalty_scheduler
             )
         if is_master(args):
             duration = (time.time()-start)/60

@@ -1,31 +1,47 @@
-""" 4x2080ti standard templet, DON'T MODIFY!!!
+""" 4x2080ti baseline templet, DON'T MODIFY!!!
 conda activate protoclip
 cd /data/codes/ProtoRKD
 export PYTHONPATH="src"
 torchrun --nproc_per_node 4 -m training.main \
     --dataset-size 2500000 --episode-size 0 --train-data 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv' \
-    --epochs 64 --save-frequency 4 --batch-size 128 --workers 8 \
-    --linear-frequency 1  --zeroshot-frequency 1 --retrieval-frequency 1  --eval-data-dir '/data/Datasets' \
+    --epochs 32 --save-frequency 8 --batch-size 128 --workers 8 \
+    --linear-frequency 2  --zeroshot-frequency 2 --retrieval-frequency 2  --eval-data-dir '/data/Datasets' \
     --lr 1e-4 --warmup 2000 --wd 0.1 --max-grad-norm 100 \
-    --model resnet18  --projection-n-layers 3 \
-    --text-teacher 'all-mpnet-base-v2' --image-teacher 'none' \
+    --model RN50  --projection-n-layers 3 \
+    --text-teacher 'clip-ViT-B-16' --image-teacher 'none' \
     --distiller 'InfoNCE' \
-    --report-to tensorboard --logs logs/exp9_adaptive_head --copy-codebase --name 'Tt[all-mpnet-base-v2]_Ti[none]_S[resnet18]_[InfoNCE]_bs512_lr1e-4_64ep(CC2.5M)'
+    --report-to tensorboard --logs logs/exp9_rethink --copy-codebase --name 'Tt[clip-ViT-B-16]_Ti[none]_S[RN50]_[InfoNCE]_bs512_lr1e-4_32ep(CC2.5M)'
 """
 
+""" 4x2080ti adaption baseline templet, DON'T MODIFY!!!
 conda activate protoclip
 cd /data/codes/ProtoRKD
 export PYTHONPATH="src"
 torchrun --nproc_per_node 4 -m training.main \
     --dataset-size 2500000 --episode-size 0 --train-data 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv' \
-    --epochs 64 --save-frequency 4 --batch-size 128 --workers 8 \
-    --linear-frequency 1  --zeroshot-frequency 1 --retrieval-frequency 1  --eval-data-dir '/data/Datasets' \
+    --epochs 32 --save-frequency 8 --batch-size 128 --workers 8 \
+    --linear-frequency 2  --zeroshot-frequency 2 --retrieval-frequency 2  --eval-data-dir '/data/Datasets' \
     --lr 1e-4 --warmup 2000 --wd 0.1 --max-grad-norm 100 \
-    --model resnet18  --projection-n-layers 3 \
-    --text-teacher 'all-mpnet-base-v2' --image-teacher 'none' \
-    --distiller 'InfoNCE' --adaption-head --quiting-power 2 --base-panalty-weight 1e-3 --final-panalty-weight 1 \
-    --report-to tensorboard --logs logs/exp9_adaptive_head --copy-codebase --name 'Tt[all-mpnet-base-v2-adapt[1e-3,1]^2]_Ti[none]_S[resnet18]_[InfoNCE]_bs512_lr1e-4_64ep(CC2.5M)'
+    --model RN50  --projection-n-layers 3 \
+    --text-teacher 'clip-ViT-B-16' --image-teacher 'none' \
+    --distiller 'InfoNCE' --adaption-head --adaption-n-layers 1 --quiting-power 0 --base-panalty-weight 0 --final-panalty-weight 0 \
+    --report-to tensorboard --logs logs/exp9_rethink --copy-codebase --name 'Tt[clip-ViT-B-16-adaption-head(1)]_Ti[none]_S[RN50]_[InfoNCE]_bs512_lr1e-4_32ep(CC2.5M)'
+"""
+#--unlock-text-teacher --text-lr 1e-6 \
 
+
+conda activate protoclip
+cd /data/codes/ProtoRKD
+export PYTHONPATH="src"
+torchrun --nproc_per_node 4 -m training.main \
+    --dataset-size 2500000 --episode-size 0 --train-data 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv' \
+    --epochs 32 --save-frequency 8 --batch-size 128 --workers 8 \
+    --linear-frequency 2  --zeroshot-frequency 2 --retrieval-frequency 2  --eval-data-dir '/data/Datasets' \
+    --lr 1e-4 --warmup 2000 --wd 0.1 --max-grad-norm 100 \
+    --model RN50  --projection-n-layers 3 \
+    --text-teacher 'clip-ViT-B-32' --image-teacher 'none' \
+    --distiller 'InfoNCE' \
+    --report-to tensorboard --logs logs/exp9_rethink --copy-codebase --name 'Tt[clip-ViT-B-32]_Ti[none]_S[RN50]_[InfoNCE]_bs512_lr1e-4_32ep(CC2.5M)'
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 

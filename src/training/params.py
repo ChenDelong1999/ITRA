@@ -57,6 +57,12 @@ def parse_args():
         default=False,
     )
     parser.add_argument(
+        "--adaption-n-layers",
+        type=int,
+        default=3,
+        help="dimension of projected representations",
+    ) 
+    parser.add_argument(
         "--quiting-power",
         type=int,
         default=2,
@@ -64,12 +70,23 @@ def parse_args():
     parser.add_argument(
         "--final-panalty-weight",
         type=float,
-        default=1000,
+        default=1000.,
     )
     parser.add_argument(
         "--base-panalty-weight",
         type=float,
         default=1e-3,
+    )
+    # quiting adaption
+    parser.add_argument(
+        "--unlock-text-teacher",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--text-lr",
+        type=float,
+        default=1e-5,
     )
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Data and Episodic training

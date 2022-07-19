@@ -19,7 +19,7 @@ def evaluate(student, teacher, epoch, preprocess, args, tb_writer=None, fast_eva
 
     if fast_evaluation:
         linear_eval_datasets = ['cifar100', 'imagenet-50k']
-        zeroshot_datasets = ['cifar100']
+        zeroshot_datasets = ['cifar100', 'imagenet']
         args.evaluation_workers = 8
     else:
         linear_eval_datasets = ['imagenet', 'cifar10', 'cifar100', 'stl10']

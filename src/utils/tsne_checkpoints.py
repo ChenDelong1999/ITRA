@@ -289,6 +289,15 @@ def evaluate_checkpoint(checkpoint_path, epoch, args):
     preprocess_train, preprocess_val = create_transforms(image_size=224, args=args)
     student = add_projection_head(student, student.output_dim, args)
     student = student.to(device)
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    sd = checkpoint["state_dict"]
+    if not args.distributed and next(iter(sd.items()))[0].startswith('module'):
+        sd = {k[len('module.'):]: v for k, v in sd.items()}
+    msg = student.load_state_dict(sd, strict=False)
+    logging.info(str(msg))
+    logging.info(f"=> Loaded checkpoint '{checkpoint_path}' (epoch {checkpoint['epoch']})")  
+ 
+
 
     #Conceptual Captions
     dataset_CC = CsvDataset(args.input_filename, preprocess_val, dataset_size=args.num_points)

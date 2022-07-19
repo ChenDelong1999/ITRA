@@ -25,9 +25,9 @@ from utils.training_utils import AverageMeter, unwrap_model
 
 def train_one_epoch(
     student, text_teacher, image_teacher, 
-    data, epoch, optimizer, scaler, scheduler, 
+    data, epoch, optimizer, scaler, scheduler, text_teacher_scheduler,
     distiller_text, distiller_image, args, tb_writer,
-    adaption_head=None, adaption_head_optimizer=None, panalty_scheduler=None
+    adaption_head=None, text_teacher_optimizer=None, panalty_scheduler=None
     ):
     device = torch.device(args.device) 
     autocast = torch.cuda.amp.autocast if args.precision == 'amp' else suppress
@@ -39,6 +39,8 @@ def train_one_epoch(
         image_teacher.eval()
     if args.adaption_head:
         adaption_head.train()
+    if args.unlock_text_teacher:
+        text_teacher.train()
     
     dataloader, sampler = data['train'].dataloader, data['train'].sampler
     if args.distributed and sampler is not None:
@@ -56,6 +58,8 @@ def train_one_epoch(
     for i, batch in enumerate(dataloader):
         step = num_batches_per_epoch * epoch + i
         scheduler(step)
+        if args.adaption_head or args.unlock_text_teacher:
+            text_teacher_scheduler(step)
         index, images, texts = batch
         if len(index)!=args.batch_size:
             continue  # drop last incomplete small batch
@@ -64,16 +68,25 @@ def train_one_epoch(
         images = images.to(device=device, non_blocking=True)
         data_time_m.update(time.time() - end)
         optimizer.zero_grad()
-        if args.adaption_head:
-            adaption_head_optimizer.zero_grad()
+        if args.adaption_head or args.unlock_text_teacher:
+            text_teacher_optimizer.zero_grad()
 
         with autocast():
             # # # # # # # # # # # # # # # # # # 
             # Text Teacher forward
             # # # # # # # # # # # # # # # # # # 
             if text_teacher is not None:
-                with torch.no_grad():
-                    text_features_t = text_teacher.encode(texts, convert_to_tensor=True,  show_progress_bar=False)
+                with suppress() if args.unlock_text_teacher else torch.no_grad() :
+                    if args.unlock_text_teacher:
+                        tokens_ = text_teacher.tokenize(texts)
+                        tokens = {
+                            'input_ids': tokens_['input_ids'].to(args.device),
+                            'attention_mask': tokens_['attention_mask'].to(args.device)
+                        }
+                        text_features_t = text_teacher(tokens)
+                        text_features_t = text_features_t['sentence_embedding']
+                    else:
+                        text_features_t = text_teacher.encode(texts, convert_to_tensor=True,  show_progress_bar=False)
                 if args.adaption_head:
                     adaption_shift = adaption_head(text_features_t)
                     text_features_t += adaption_shift
@@ -103,10 +116,18 @@ def train_one_epoch(
             
             if text_teacher is not None:
                 student_features_text = student.module.text_projection_head(student_features) if args.distributed else student.text_projection_head(student_features)
+                    
+                # gather features
+                if args.distributed:
+                    student_features_text, text_features_t = gather_features(
+                        student_features_text, text_features_t,
+                        args.local_loss, args.gather_with_grad, 
+                        args.rank, args.world_size, args.horovod
+                        )
                 text_loss = distiller_text(text_features_t, student_features_text)
                 if args.adaption_head:
                     panalty_weight = panalty_scheduler[step]
-                    adaption_norm = torch.norm(adaption_shift, p=2, dim=0).mean()
+                    adaption_norm = torch.norm(adaption_shift, p=2, dim=0).mean() + 1e-8
                     text_loss += panalty_weight * adaption_norm
             else:
                 text_loss = 0
@@ -122,21 +143,16 @@ def train_one_epoch(
             # # # # # # # # # # # # # # # # # # 
             # loss backward
             # # # # # # # # # # # # # # # # # # 
-            # FIXME: gather skiped. InfoNCE will degenerate
-            # if args.distributed:
-            #     all_image_features, all_text_features = gather_features(
-            #         image_features, text_features,
-            #         args.local_loss, args.gather_with_grad, 
-            #         args.rank, args.world_size, args.horovod
-            #         )
-            # else:
-            #     all_image_features, all_text_features = image_features, text_features
             
 
         if scaler is not None:
             scaler.scale(total_loss).backward()
             scaler.unscale_(optimizer)
             norm = nn.utils.clip_grad_norm_(student.parameters(), max_norm=args.max_grad_norm)
+            # if args.adaption_head:
+            #     adaption_head_norm = nn.utils.clip_grad_norm_(adaption_head.parameters(), max_norm=args.max_grad_norm)
+            # if args.unlock_text_teacher:
+            #     text_teacher_norm = nn.utils.clip_grad_norm_(text_teacher.parameters(), max_norm=args.max_grad_norm)
             if args.horovod:
                 optimizer.synchronize()
                 scaler.unscale_(optimizer)
@@ -150,8 +166,8 @@ def train_one_epoch(
             norm = nn.utils.clip_grad_norm_(student.parameters(), max_norm=args.max_grad_norm)
             optimizer.step()
 
-        if args.adaption_head:
-            adaption_head_optimizer.step()
+        if args.adaption_head or args.unlock_text_teacher:
+            text_teacher_optimizer.step()
 
         batch_time_m.update(time.time() - end)
         end = time.time()
@@ -185,10 +201,16 @@ def train_one_epoch(
                 "bathc total time (s)": batch_time_m.val,
             }
             
-            if args.adaption_head:
-                log_data['adaption-shift-norm'] = adaption_norm
-                log_data['adaption-panalty-weight'] = panalty_weight
+            if args.adaption_head or args.unlock_text_teacher:
+                log_data['learning-rate-text'] = text_teacher_optimizer.param_groups[0]["lr"]
+                if args.adaption_head:
+                    log_data['adaption-shift-norm'] = adaption_norm
+                    log_data['adaption-panalty-weight'] = panalty_weight
+                    # log_data['adaption-grad-norm'] = adaption_head_norm
 
+                # if args.unlock_text_teacher:
+                #     log_data['text-teacher-grad-norm'] = text_teacher_norm
+                
             for name, val in log_data.items():
                 name = "training/" + name
                 if tb_writer is not None:
