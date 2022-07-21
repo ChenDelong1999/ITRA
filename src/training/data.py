@@ -109,8 +109,10 @@ class ImageNet_nori(Dataset):
         super(ImageNet_nori, self).__init__()
         if split=='train':
             nori_path = "s3://generalDetection/ILSVRC2012/imagenet.train.nori.list"
+            #nori_path = "s3://public-datasets-contrib/ILSVRC2012/processed/nori/imagenet.train.nori.list"
         elif split=='val':
             nori_path = "s3://generalDetection/ILSVRC2012/imagenet.val.nori.list"
+            #nori_path = "s3://public-datasets-contrib/ILSVRC2012/processed/nori/imagenet.val.nori.list"
 
         self.f = None #nori.Fetcher()
         self.f_list = []

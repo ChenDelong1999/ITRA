@@ -21,138 +21,65 @@ from .distributed import is_master, get_gathered_item
 import torch.distributed as dist
 from training.evaluations.analyze_features import get_modality_gap
 from utils.training_utils import AverageMeter, unwrap_model
-
+from training.prompt import encode_text_with_prompt
 
 def train_one_epoch(
-    student, text_teacher, image_teacher, 
-    data, epoch, optimizer, scaler, scheduler, text_teacher_scheduler,
-    distiller_text, distiller_image, args, tb_writer,
-    adaption_head=None, text_teacher_optimizer=None, panalty_scheduler=None
+    model, 
+    data, 
+    epoch, 
+    optimizer, 
+    scaler, 
+    scheduler,  
+    distiller, 
+    args, 
+    writer 
     ):
     device = torch.device(args.device) 
     autocast = torch.cuda.amp.autocast if args.precision == 'amp' else suppress
 
-    student.train()
-    if text_teacher is not None:
-        text_teacher.eval()
-    if image_teacher is not None:
-        image_teacher.eval()
-    if args.adaption_head:
-        adaption_head.train()
-    if args.unlock_text_teacher:
-        text_teacher.train()
-    
+    model.train()  
     dataloader, sampler = data['train'].dataloader, data['train'].sampler
     if args.distributed and sampler is not None:
         sampler.set_epoch(epoch)
     num_batches_per_epoch = dataloader.num_batches
-    sample_digits = math.ceil(math.log(dataloader.num_samples + 1, 10))
 
     batch_time_m = AverageMeter()
     data_time_m = AverageMeter()
     end = time.time()
-    
-    if is_master(args):
-        logging.info(f'Using [{args.distiller}] distiller')
-    
+        
     for i, batch in enumerate(dataloader):
         step = num_batches_per_epoch * epoch + i
         scheduler(step)
-        if args.adaption_head or args.unlock_text_teacher:
-            text_teacher_scheduler(step)
         index, images, texts = batch
         if len(index)!=args.batch_size:
-            continue  # drop last incomplete small batch
+            continue  # drop the last incomplete batch
         
         #all_index = get_gathered_item(index.cuda(), args)
         images = images.to(device=device, non_blocking=True)
         data_time_m.update(time.time() - end)
         optimizer.zero_grad()
-        if args.adaption_head or args.unlock_text_teacher:
-            text_teacher_optimizer.zero_grad()
 
+        # # # # # # # # # # # # # # # # # # 
+        # model forward
+        # # # # # # # # # # # # # # # # # # 
         with autocast():
-            # # # # # # # # # # # # # # # # # # 
-            # Text Teacher forward
-            # # # # # # # # # # # # # # # # # # 
-            if text_teacher is not None:
-                with suppress() if args.unlock_text_teacher else torch.no_grad() :
-                    if args.unlock_text_teacher:
-                        tokens_ = text_teacher.tokenize(texts)
-                        tokens = {
-                            'input_ids': tokens_['input_ids'].to(args.device),
-                            'attention_mask': tokens_['attention_mask'].to(args.device)
-                        }
-                        text_features_t = text_teacher(tokens)
-                        text_features_t = text_features_t['sentence_embedding']
-                    else:
-                        text_features_t = text_teacher.encode(texts, convert_to_tensor=True,  show_progress_bar=False)
-                if args.adaption_head:
-                    adaption_shift = adaption_head(text_features_t)
-                    text_features_t += adaption_shift
-                with torch.no_grad():# FIXME: possible bug due to stoped gradient?
-                    if args.distiller in ['ProtoCPC', 'DINO']:
-                        prototype = student.module.text_projection_head.last_layer if args.distributed else student.text_projection_head.last_layer
-                        text_features_t = prototype(text_features_t)
+            image_features, text_features, logit_scale = model(images, texts)
+            # gather features
+            if args.distributed:
+                all_image_features, all_text_features = gather_features(
+                    image_features, text_features,
+                    args.local_loss, args.gather_with_grad, 
+                    args.rank, args.world_size, args.horovod
+                    )
+            total_loss = distiller(all_text_features, all_image_features, logit_scale=logit_scale)
             
-            # # # # # # # # # # # # # # # # # # 
-            # Image Teacher forward
-            # # # # # # # # # # # # # # # # # # 
-            if image_teacher is not None:
-                with torch.no_grad():
-                    image_features_t = image_teacher(images)
-                    if args.distiller in ['ProtoCPC', 'DINO']:
-                        prototype = student.module.image_projection_head.last_layer if args.distributed else student.image_projection_head.last_layer
-                        image_features_t = prototype(image_features_t)
-
-            # # # # # # # # # # # # # # # # # # 
-            # Image Student forward
-            # # # # # # # # # # # # # # # # # # 
-            if args.freeze_student_backbone:
-                with torch.no_grad():
-                    student_features = student(images).detach()
-            else:
-                student_features = student(images)
-            
-            if text_teacher is not None:
-                student_features_text = student.module.text_projection_head(student_features) if args.distributed else student.text_projection_head(student_features)
-                    
-                # gather features
-                if args.distributed:
-                    student_features_text, text_features_t = gather_features(
-                        student_features_text, text_features_t,
-                        args.local_loss, args.gather_with_grad, 
-                        args.rank, args.world_size, args.horovod
-                        )
-                text_loss = distiller_text(text_features_t, student_features_text)
-                if args.adaption_head:
-                    panalty_weight = panalty_scheduler[step]
-                    adaption_norm = torch.norm(adaption_shift, p=2, dim=0).mean() + 1e-8
-                    text_loss += panalty_weight * adaption_norm
-            else:
-                text_loss = 0
-
-            if image_teacher is not None:
-                student_features_image = student.module.image_projection_head(student_features) if args.distributed else student.image_projection_head(student_features)  
-                image_loss = distiller_image(image_features_t, student_features_image)
-            else:
-                image_loss = 0
-            
-            total_loss = text_loss + image_loss
-            
-            # # # # # # # # # # # # # # # # # # 
-            # loss backward
-            # # # # # # # # # # # # # # # # # # 
-            
-
+        # # # # # # # # # # # # # # # # # # 
+        # loss backward
+        # # # # # # # # # # # # # # # # # # 
         if scaler is not None:
             scaler.scale(total_loss).backward()
             scaler.unscale_(optimizer)
-            norm = nn.utils.clip_grad_norm_(student.parameters(), max_norm=args.max_grad_norm)
-            # if args.adaption_head:
-            #     adaption_head_norm = nn.utils.clip_grad_norm_(adaption_head.parameters(), max_norm=args.max_grad_norm)
-            # if args.unlock_text_teacher:
-            #     text_teacher_norm = nn.utils.clip_grad_norm_(text_teacher.parameters(), max_norm=args.max_grad_norm)
+            norm = nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.max_grad_norm)
             if args.horovod:
                 optimizer.synchronize()
                 scaler.unscale_(optimizer)
@@ -163,11 +90,8 @@ def train_one_epoch(
             scaler.update()
         else:
             total_loss.backward()
-            norm = nn.utils.clip_grad_norm_(student.parameters(), max_norm=args.max_grad_norm)
+            norm = nn.utils.clip_grad_norm_(model.parameters(), max_norm=args.max_grad_norm)
             optimizer.step()
-
-        if args.adaption_head or args.unlock_text_teacher:
-            text_teacher_optimizer.step()
 
         batch_time_m.update(time.time() - end)
         end = time.time()
@@ -177,6 +101,7 @@ def train_one_epoch(
             num_samples = batch_count * batch_size * args.world_size
             samples_per_epoch = dataloader.num_samples
             percent_complete = 100.0 * batch_count / num_batches_per_epoch
+            sample_digits = math.ceil(math.log(dataloader.num_samples + 1, 10))
 
             # NOTE loss is coarsely sampled, just master node and per log update
             logging.info(
@@ -191,38 +116,33 @@ def train_one_epoch(
             # Save train loss / etc. Using non avg meter values as loggers have their own smoothing
             log_data = {
                 "loss-total": total_loss.item(),
-                "loss-image": image_loss.item() if image_teacher is not None else 0,
-                "loss-text": text_loss.item() if text_teacher is not None else 0,
                 "learning_rate": optimizer.param_groups[0]["lr"],
                 "gradient-norm": norm,
+                "logit_scale": model.module.logit_scale.item()
             }
             profiling = {
                 "batch data time (s)": data_time_m.val,
                 "bathc total time (s)": batch_time_m.val,
             }
-            
-            if args.adaption_head or args.unlock_text_teacher:
-                log_data['learning-rate-text'] = text_teacher_optimizer.param_groups[0]["lr"]
-                if args.adaption_head:
-                    log_data['adaption-shift-norm'] = adaption_norm
-                    log_data['adaption-panalty-weight'] = panalty_weight
-                    # log_data['adaption-grad-norm'] = adaption_head_norm
+        
+            if args.prompt:
+                log_data['prompt-norm'] = model.prompt().norm(dim=1, p=2).mean()
 
                 # if args.unlock_text_teacher:
                 #     log_data['text-teacher-grad-norm'] = text_teacher_norm
                 
             for name, val in log_data.items():
                 name = "training/" + name
-                if tb_writer is not None:
-                    tb_writer.add_scalar(name, val, step)
+                if writer is not None:
+                    writer.add_scalar(name, val, step)
                 if args.wandb:
                     assert wandb is not None, 'Please install wandb.'
                     wandb.log({name: val, 'step': step})
 
             for name, val in profiling.items():
                 name = "profiling/" + name
-                if tb_writer is not None:
-                    tb_writer.add_scalar(name, val, step)
+                if writer is not None:
+                    writer.add_scalar(name, val, step)
                 if args.wandb:
                     assert wandb is not None, 'Please install wandb.'
                     wandb.log({name: val, 'step': step})
@@ -231,4 +151,9 @@ def train_one_epoch(
             batch_time_m.reset()
             data_time_m.reset()
 
+
+def mean_pooling(model_output, attention_mask):
+    token_embeddings = model_output[0] #First element of model_output contains all token embeddings
+    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 

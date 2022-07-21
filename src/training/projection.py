@@ -21,46 +21,6 @@ import logging
 #         return nn.Sequential(*layers).to(args.device)
 
 
-def add_projection_head(model, input_dim, args):
-    # model.image_projection_head = get_projection_head(input_dim, args)
-    
-    if args.distiller in ['ProtoCPC', 'DINO']:
-        skip_last_layer=False
-    else:
-        skip_last_layer=True
-    
-    if args.image_teacher!='none':
-        model.image_projection_head = DINOHead(
-            input_dim, 
-            65536, 
-            bottleneck_dim=args.image_teacher_dim,
-            nlayers=args.projection_n_layers, 
-            skip_last_layer=skip_last_layer
-            ).to(args.device)
-
-    if args.text_teacher!='none':
-        model.text_projection_head = DINOHead(
-            input_dim, 
-            65536, 
-            bottleneck_dim=args.text_teacher_dim,
-            nlayers=args.projection_n_layers, 
-            skip_last_layer=skip_last_layer
-            ).to(args.device)
-    
-    return model
-
-
-def get_adaption_head(args):
-    projection_head = DINOHead(
-            args.text_teacher_dim, 
-            1, 
-            bottleneck_dim=args.text_teacher_dim,
-            nlayers=args.adaption_n_layers, 
-            skip_last_layer=True
-            ).to(args.device)
-    return projection_head
-
-
 class DINOHead(nn.Module):
     def __init__(self, in_dim, out_dim, weight_norm_=True, act='gelu', use_bn=False, nlayers=3, hidden_dim=2048, bottleneck_dim=256, skip_last_layer=False):
         super().__init__()

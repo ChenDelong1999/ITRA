@@ -12,27 +12,29 @@ try:
 except ImportError:
     wandb = None
 
-def evaluate(student, teacher, epoch, preprocess, args, tb_writer=None, fast_evaluation=True):
+def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=True):
     if args.distributed and not is_master(args):
         return
     logging.info( f"Starting evaluation of [{args.name}] at epoch {epoch}")
 
     if fast_evaluation:
-        linear_eval_datasets = ['cifar100', 'imagenet-50k']
-        zeroshot_datasets = ['cifar100', 'imagenet']
+        args.fast_evaluation = True
+        linear_eval_datasets = ['imagenet-50k']
+        zeroshot_datasets = ['imagenet']
         args.evaluation_workers = 8
     else:
+        args.fast_evaluation = False
         linear_eval_datasets = ['imagenet', 'cifar10', 'cifar100', 'stl10']
         zeroshot_datasets = ['imagenet', 'cifar10', 'cifar100', 'stl10', 'birdsnap','country211', 'flowers102', 'gtsrb', 'ucf101','stanford_cars']
         args.evaluation_workers = 8
     
-    student.eval()
+    model.eval()
     all_metrics = {}
     
     # zeroshot classification
     metrics = {}
     for zeroshot_dataset in zeroshot_datasets:
-        zeroshot_metrics = zero_shot_eval(student, teacher, zeroshot_dataset, epoch, preprocess, args)
+        zeroshot_metrics = zero_shot_eval(model, zeroshot_dataset, epoch, preprocess, args)
         metrics.update(zeroshot_metrics)
         all_metrics.update(zeroshot_metrics)
     for name, val in metrics.items():
@@ -43,7 +45,7 @@ def evaluate(student, teacher, epoch, preprocess, args, tb_writer=None, fast_eva
     
     # MS-COCO retrieval
     metrics = {}
-    retrieval_metrics, all_image_features, all_text_features= coco_retrieval_evaluation(student, teacher, epoch, preprocess, args)
+    retrieval_metrics, all_image_features, all_text_features= coco_retrieval_evaluation(model, epoch, preprocess, args)
     metrics.update(retrieval_metrics)
     all_metrics.update(retrieval_metrics)
     for name, val in metrics.items():
@@ -53,18 +55,19 @@ def evaluate(student, teacher, epoch, preprocess, args, tb_writer=None, fast_eva
             wandb.log({f"eval_retrieval/{name}": val, 'epoch': epoch})
     
     # Analyse COCO features
-    feature_metrics = analyze_features(all_image_features, all_text_features, args)
-    all_metrics.update(feature_metrics)
-    for name, val in feature_metrics.items():
-        if tb_writer is not None:
-            tb_writer.add_scalar(f"eval_analyze_features/{name}", val, epoch)
-        if args.wandb:
-            wandb.log({f"eval_analyze_features/{name}": val, 'epoch': epoch})
+    if not fast_evaluation:
+        feature_metrics = analyze_features(all_image_features, all_text_features, args)
+        all_metrics.update(feature_metrics)
+        for name, val in feature_metrics.items():
+            if tb_writer is not None:
+                tb_writer.add_scalar(f"eval_analyze_features/{name}", val, epoch)
+            if args.wandb:
+                wandb.log({f"eval_analyze_features/{name}": val, 'epoch': epoch})
 
     # linear evaluation
     metrics = {}
     if linear_eval_datasets:
-        linear_metrics = linear_eval(student, linear_eval_datasets, epoch, preprocess, args)    
+        linear_metrics = linear_eval(model, linear_eval_datasets, epoch, preprocess, args)    
         metrics.update(linear_metrics)
         all_metrics.update(linear_metrics)
 

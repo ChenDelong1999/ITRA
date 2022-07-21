@@ -259,7 +259,7 @@ def evaluate_checkpoint(checkpoint_path, epoch, args):
     logging.info(f'Loading pretrained text trasformer teacher: {args.text_teacher}.')
      
     text_teacher = SentenceTransformer(args.text_teacher).to(device)
-    if args.text_teacher=='clip-ViT-B-32':
+    if args.text_teacher in ['clip-ViT-B-32', 'clip-ViT-B-16']:
         args.text_teacher_dim = 512
     else:   
         args.text_teacher_dim = text_teacher.get_sentence_embedding_dimension()

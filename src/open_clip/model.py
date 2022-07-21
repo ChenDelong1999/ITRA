@@ -339,10 +339,9 @@ class CLIP(nn.Module):
         if isinstance(text_cfg, dict):
             text_cfg = CLIPTextCfg(**text_cfg)
 
+        self.embed_dim = embed_dim
+        self.text_width = text_cfg.width
         self.context_length = text_cfg.context_length
-
-        # if int(args.embed_dim) > 0:
-        #     embed_dim = int(args.embed_dim)
 
         # OpenAI models are pretrained w/ QuickGELU but native nn.GELU is both faster and more
         # memory efficient in recent PyTorch releases (>= 1.10).

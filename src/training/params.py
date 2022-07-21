@@ -26,6 +26,62 @@ def parse_args():
         default='SimReg',
         help="SimReg, RKD, CompRess, CompRess-1q, CLIP",
     )
+
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    # Knowledge Distillation Model
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    # === text model === #
+    parser.add_argument(
+        "--text-model", default='', type=str,
+        help="In open_clip.list_models() or hugging face transformers",
+    )    
+    parser.add_argument(
+        "--text-model-builder",
+        choices=['OpenCLIP', "sentence-transformer"],
+        default='OpenCLIP',
+        help="how to build the text model",
+    ) 
+    parser.add_argument(
+        "--pretrained-text-model", action="store_true", default=False,
+        help="pretrained text?",
+    )
+    parser.add_argument(
+        "--unlock-text-model", action="store_true", default=False,
+        help="train text?",
+    )
+    parser.add_argument(
+        "--text-head-n-layers", type=int, default=3,
+        help="how many MLP layers for text projection head",
+    )
+    # === image model === #
+    parser.add_argument(
+        "--image-model", default='', type=str,
+        help="In open_clip.list_models() or torchvision",
+    )    
+    parser.add_argument(
+        "--image-model-builder",
+        choices=['OpenCLIP', "torchvision"],
+        default='OpenCLIP',
+        help="how to build the image model",
+    ) 
+    parser.add_argument(
+        "--pretrained-image-model", action="store_true", default=False,
+        help="pretrained image?",
+    )
+    parser.add_argument(
+        "--unlock-image-model", action="store_true", default=False,
+        help="train image?",
+    )
+    parser.add_argument(
+        "--image-head-n-layers", type=int, default=3,
+        help="how many MLP layers for image projection head",
+    )
+
+    parser.add_argument(
+        "--joint-projection-dim", type=int, default=-1,
+        help="dimension of projected representations",
+    ) 
+
     parser.add_argument(
         "--freeze-student-backbone",
         action="store_true",
@@ -37,12 +93,6 @@ def parse_args():
         default='',
         type=str,
         help="Use a pretrained CLIP model weights with the specified tag or file path.",
-    )
-    parser.add_argument(
-        "--image-teacher",
-        default='none',
-        type=str,
-        help="To be implement",
     )
     parser.add_argument(
         "--text-teacher",
@@ -79,6 +129,11 @@ def parse_args():
     )
     # quiting adaption
     parser.add_argument(
+        "--random-text-teacher",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
         "--unlock-text-teacher",
         action="store_true",
         default=False,
@@ -87,6 +142,16 @@ def parse_args():
         "--text-lr",
         type=float,
         default=1e-5,
+    )
+    parser.add_argument(
+        "--prompt",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--n-prompt",
+        type=int,
+        default=0,
     )
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Data and Episodic training

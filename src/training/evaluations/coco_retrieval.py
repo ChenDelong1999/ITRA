@@ -7,6 +7,7 @@ from torchvision.datasets.coco import CocoCaptions
 from torch.utils.data import Dataset, DataLoader
 from open_clip import tokenize as clip_tokenizer
 from PIL import Image
+from training.prompt import encode_text_with_prompt
 
 
 class CocoDataset(Dataset):
@@ -59,7 +60,7 @@ class CocoTexts():
         return self.coco_dataset.text[index]
 
 
-def coco_retrieval_evaluation(student, teacher, epoch, preprocess, args):
+def coco_retrieval_evaluation(model, epoch, preprocess, args):
     if args.retrieval_frequency == 0:
         return {}, None, None
     if (epoch % args.retrieval_frequency) != 0 and epoch != args.epochs:
@@ -86,14 +87,12 @@ def coco_retrieval_evaluation(student, teacher, epoch, preprocess, args):
         logging.info('extracting COCO text features...')
         all_text_features = []
             
-        for texts in tqdm.tqdm(coco_retrieval_text_dataloader):
-            text_features = teacher.encode(
-                texts,
-                convert_to_tensor=True, 
-                show_progress_bar=False
-                )
-            text_features = text_features.detach().cpu()
-            all_text_features.append(text_features)
+        for texts in tqdm.tqdm(coco_retrieval_text_dataloader):    
+            if args.distributed and not args.horovod:
+                text_features = model.module.encode_text(texts, projection=True)
+            else:
+                text_features = model.encode_text(texts, projection=True)
+            all_text_features.append(text_features.detach().cpu())
         all_text_features = torch.cat(all_text_features,dim=0)
         
         logging.info('extracting COCO image features...')
@@ -102,13 +101,10 @@ def coco_retrieval_evaluation(student, teacher, epoch, preprocess, args):
             images = images.to(args.device)
 
             if args.distributed and not args.horovod:
-                image_features = student.module(images)
-                image_features = student.module.text_projection_head(image_features, skip_last_layer=True).detach().cpu()
+                image_features = model.module.encode_image(images, projection=True)
             else:
-                image_features = student(images)
-                image_features = student.text_projection_head(image_features, skip_last_layer=True).detach().cpu()
-                
-            all_image_features.append(image_features)
+                image_features = model.encode_image(images, projection=True)
+            all_image_features.append(image_features.detach().cpu())
         all_image_features = torch.cat(all_image_features,dim=0)
 
         # normalization, this step is important

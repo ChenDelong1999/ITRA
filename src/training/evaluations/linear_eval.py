@@ -175,9 +175,9 @@ def get_features(model, dataset, args):
             images = images.to(args.device)
 
             if args.distributed and not args.horovod:
-                image_features = model.module(images)
+                image_features = model.module.encode_image(images)
             else:
-                image_features = model(images)
+                image_features = model.encode_image(images)
 
             all_features.append(image_features.cpu())
             all_labels.append(labels.cpu())
@@ -250,10 +250,12 @@ def linear_eval(model, dataset_names, epoch, preprocess, args):
         logging.info(f'starting linear evaluation on {dataset_name}...')
         train_features, train_labels, test_features, test_labels = get_dataset_features(model, dataset_name, args.eval_data_dir, preprocess, args)
         linear_acc = get_linear_eval_acc(train_features, train_labels, test_features, test_labels, args)
-        knn_acc = get_knn_acc(train_features, train_labels, test_features, test_labels, args)
         results[f'{dataset_name}-linear-eval-acc'] = linear_acc
-        results[f'{dataset_name}-knn-eval-acc'] = knn_acc
-        logging.info(f'Finished linear evaluation on  {dataset_name}. Linear accuracy: {linear_acc}, KNN accuracy: {knn_acc}')
+        logging.info(f'Finished linear evaluation on  {dataset_name} accuracy: {linear_acc}')
+        if args.fast_evaluation:
+            knn_acc = get_knn_acc(train_features, train_labels, test_features, test_labels, args)
+            results[f'{dataset_name}-knn-eval-acc'] = knn_acc
+            logging.info(f'Finished K-NN evaluation on  {dataset_name}, accuracy: {knn_acc}')
 
     return results
 

@@ -4,8 +4,9 @@ import logging
 import os
 import random
 from datetime import datetime
-
 import numpy as np
+import matplotlib.pyplot as plt
+
 import torch
 from torch import optim
 import torch.distributed as dist
@@ -26,12 +27,7 @@ try:
 except ImportError:
     hvd = None
 
-from open_clip import trace_model, create_model_and_transforms, create_transforms, list_models
-from sentence_transformers import SentenceTransformer
-from training.visual_model import get_visual_model_and_preprocess
-
-from seed import models
-# from training.clustering import Clustering
+from training.model import get_model
 from training.data import get_data
 from training.distributed import is_master, init_distributed_device, world_info_from_env
 from training.logger import setup_logging
@@ -39,17 +35,15 @@ from training.params import parse_args
 from training.scheduler import cosine_lr, cosine_wd
 from training.train import train_one_epoch
 from training.evaluations.evaluation import evaluate
-from training.projection import add_projection_head, get_adaption_head
+from training.prompt import Prompt
 
-from utils import protoseed_utils
 from distiller import get_distiller
 
-import matplotlib.pyplot as plt
-
-# to disable warning "huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks..."
+# to disable warning "huggingface/tokenizers: 
+# ("The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-
+# fix random seed
 def random_seed(seed):
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -67,7 +61,7 @@ def main():
     # get the name of the experiments
     if args.name is None:
         args.name = '-'.join([
-            datetime.now().strftime("%Y_%m_%d-%H_%M"), # disabled since it might make different process to have different names
+            datetime.now().strftime("%Y_%m_%d-%H_%M_%S"),
             f"model_{args.model}",
             f"lr_{args.lr}",
             f"b_{args.batch_size}",
@@ -86,9 +80,7 @@ def main():
         log_filename = f'out-{args.rank}' if args.log_local else 'out.log'
         args.log_path = os.path.join(log_base_path, log_filename)
         if os.path.exists(args.log_path):
-            print(
-                "Error. Experiment already exists. Use --name {} to specify a new experiment."
-            )
+            print("Error. Experiment already exists. Use --name {} to specify a new experiment.")
             return -1
 
     # Set logger
@@ -104,7 +96,7 @@ def main():
     args.tensorboard = 'tensorboard' in args.report_to or 'all' in args.report_to
     
     # NCCL does not support CPU tensor communication. Set up manual multiprocessing communication.
-    args.cache_path = os.path.join(args.logs, args.name, "cache") 
+    args.cache_path = os.path.join(args.logs, args.name, "cache") # this is only for protoclip
     args.visualization_path = os.path.join(args.logs, args.name, "visualization") 
     if is_master(args):
         args.tensorboard_path = os.path.join(args.logs, args.name, "tensorboard") if args.tensorboard else ''
@@ -127,114 +119,40 @@ def main():
 
     if args.horovod:
         logging.info(
-            f'Running in horovod mode with multiple processes / nodes. Device: {args.device}.'
+            f'Running in horovod mode with multiple processes / nodes. Device: {args.device}. '
             f'Process (global: {args.rank}, local {args.local_rank}), total {args.world_size}.')
     elif args.distributed:
         logging.info(
-            f'Running in distributed mode with multiple processes. Device: {args.device}.'
+            f'Running in distributed mode with multiple processes. Device: {args.device}. '
             f'Process (global: {args.rank}, local {args.local_rank}), total {args.world_size}.')
     else:
         logging.info(f'Running with a single process. Device {args.device}.')
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    # Build teacher and student
+    # Build teacher, student and distiller
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-    # === text teacher === #
-    logging.info(f'Loading pretrained text transformer as teacher: {args.text_teacher}.')
-    if args.text_teacher!='none':
-        text_teacher = SentenceTransformer(args.text_teacher, device=args.device).to(args.device)
-        text_teacher.max_seq_length = 77
-        if args.text_teacher in ['clip-ViT-B-32', 'clip-ViT-B-16']:
-            args.text_teacher_dim = 512
-        else:   
-            args.text_teacher_dim = text_teacher.get_sentence_embedding_dimension()
-        distiller_text = get_distiller(args.distiller)(args, args.text_teacher_dim).to(args.device)
-    else:
-        text_teacher = None
-        distiller_text = None
-        args.text_teacher_dim = 1
+    model, preprocess_train, preprocess_val = get_model(args)
     
-    if args.adaption_head:
-        adaption_head = get_adaption_head(args)
-    else:
-        adaption_head = None
-
-
-    # === image teacher === #
-    #if args.image_teacher in list_models():
-    if args.image_teacher!='none':
-        CLIP_model, preprocess_train, preprocess_val = create_model_and_transforms(
-            args.image_teacher,
-            pretrained='openai',
-            precision=args.precision,
-            device=args.device,
-            jit=args.torchscript,
-            force_quick_gelu=args.force_quick_gelu,
-            args=args
-        )
-        image_teacher = CLIP_model.visual
-        args.image_teacher_dim = 1024 # FIXME
-        distiller_image = get_distiller(args.distiller)(args, args.image_teacher_dim).to(args.device)
-    else:
-        image_teacher = None
-        args.image_teacher_dim = 1
-        distiller_image = None
-
-    # === student === #
-    if args.model in list_models():
-        CLIP_model, preprocess_train, preprocess_val = create_model_and_transforms(
-            args.model,
-            args.pretrained,
-            precision=args.precision,
-            device=args.device,
-            jit=args.torchscript,
-            force_quick_gelu=args.force_quick_gelu,
-            args=args
-        )
-        # CLIP_model created by OpenCLIP has image and text tower,
-        # remove text tower and leave the image tower as student.
-        student = CLIP_model.visual
-    else:
-        pretrained = (args.pretrained=='torchvision')
-        logging.info(f'[torchvision]: loading {args.model} model as student, pretrained={pretrained}')
-        student = models.__dict__[args.model](pretrained=pretrained, num_classes=1000)
-        student.output_dim = student.fc.weight.shape[1]
-        student.fc=torch.nn.Identity()
-        student.to(device=args.device)
-        
-    preprocess_train, preprocess_val = create_transforms(image_size=224, args=args)
-
-    if args.freeze_student_backbone:
-        for param in student.parameters():
-            param.requires_grad = False
-            
-    student = add_projection_head(student, student.output_dim, args)
-
-    if is_master(args):
-        logging.info('* '*32 + '[student]\n' +str(student))
-        logging.info('* '*32 + '[image_teacher]\n' +str(image_teacher))
-        logging.info('* '*32 + '[text_teacher]\n' +str(text_teacher))
-        logging.info('* '*32 + '[adaption_head]\n' +str(adaption_head))
-
-    if args.trace:
-        student = trace_model(student, batch_size=args.batch_size, device=device)
-
     if args.distributed and not args.horovod:
         if args.use_bn_sync:
-            student = torch.nn.SyncBatchNorm.convert_sync_batchnorm(student)
+            model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         ddp_args = {}
         if args.ddp_static_graph:
             # this doesn't exist in older PyTorch, arg only added if enabled
             ddp_args['static_graph'] = True
-        student = torch.nn.parallel.DistributedDataParallel(
-            student, 
+        model = torch.nn.parallel.DistributedDataParallel(
+            model, 
             device_ids=[device], 
-            broadcast_buffers=False,
+            #broadcast_buffers=False,
+            find_unused_parameters=True,
             **ddp_args, 
         )
 
-    
+    distiller = get_distiller(args)(args, args.joint_projection_dim).to(args.device)
+    if is_master(args):
+        logging.info(f'Created [{args.distiller}] distiller: '+str(distiller))
+
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # initialize datasets
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -250,6 +168,12 @@ def main():
             logging.info(f"Model will be trained with epoch-wise training strategy.")
 
     data = get_data(args, (preprocess_train, preprocess_val), index_mapping=index_mapping)
+    if is_master(args):
+        logging.info(f'Dataset initialized:')
+        logging.info(f'\tdataset length: \t{len(data["train"].dataset)}')
+        logging.info(f'\tdataloader length: \t{len(data["train"].dataloader)}')
+        logging.info(f'\tsampler length: \t{len(data["train"].sampler)}')
+
 
     if args.train_data is not None and args.dataset_size is None:
         args.dataset_size = len(data['train'].dataset.captions)
@@ -262,11 +186,20 @@ def main():
     optimizer = None
     scaler = None
     if args.train_data:
-        assert not args.trace, 'Cannot train with traced model'
         exclude = lambda n, p: p.ndim < 2 or "bn" in n or "ln" in n or "bias" in n or 'logit_scale' in n
         include = lambda n, p: not exclude(n, p)
 
-        named_parameters = list(student.named_parameters())
+        named_parameters = list(model.named_parameters())
+        
+        if is_master(args):
+            logging.info(f"Prameters to be optimized:")
+            for n, p in named_parameters:
+                if p.requires_grad:
+                    logging.info(f'\t{n}\t{p.size()}')
+            logging.info(f"Prameters NOT to be optimized:")
+            for n, p in named_parameters:
+                if not p.requires_grad:
+                    logging.info(f'\t{n}\t{p.size()}')
         gain_or_bias_params = [p for n, p in named_parameters if exclude(n, p) and p.requires_grad]
         rest_params = [p for n, p in named_parameters if include(n, p) and p.requires_grad]
 
@@ -280,41 +213,14 @@ def main():
             eps=args.eps,
         )
         if args.horovod:
-            optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=student.named_parameters())
-            hvd.broadcast_parameters(student.state_dict(), root_rank=0)
+            optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters())
+            hvd.broadcast_parameters(model.state_dict(), root_rank=0)
             hvd.broadcast_optimizer_state(optimizer, root_rank=0)
 
         scaler = GradScaler() if args.precision == "amp" else None
         total_steps = data["train"].dataloader.num_batches * args.epochs
         scheduler = cosine_lr(optimizer, args.lr, args.warmup, total_steps)
 
-        # if use gradually disappering adaptive teacher projection head
-        if args.adaption_head or args.unlock_text_teacher:
-            params = []
-            if args.adaption_head:
-                params.append({"params": adaption_head.parameters(), "weight_decay": args.wd})
-            if args.unlock_text_teacher:
-                params.append({"params": text_teacher.parameters(), "weight_decay": 1e-4})
-            text_teacher_optimizer = optim.AdamW(
-                params=params,
-                lr=args.text_lr,
-                betas=(args.beta1, args.beta2),
-                eps=args.eps,
-            )
-            panalty_scheduler = cosine_wd(base_value=args.base_panalty_weight, final_value=args.final_panalty_weight, power=args.quiting_power, total_step=args.epochs * data["train"].dataloader.num_batches)
-            
-            
-            text_teacher_scheduler = cosine_lr(text_teacher_optimizer, args.text_lr, args.warmup, total_steps)
-            
-            if is_master(args):
-                fig_path = os.path.join(args.visualization_path, 'panalty_scheduler.png')
-                plt.plot(panalty_scheduler)
-                plt.savefig(fig_path)
-                logging.info(f'panalty_scheduler (graph saved to {fig_path}):\n'+str(panalty_scheduler))
-        else:
-            text_teacher_optimizer = None
-            text_teacher_scheduler = None
-            panalty_scheduler=None
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # optionally resume from a checkpoint
@@ -329,7 +235,7 @@ def main():
                 sd = checkpoint["state_dict"]
                 if not args.distributed and next(iter(sd.items()))[0].startswith('module'):
                     sd = {k[len('module.'):]: v for k, v in sd.items()}
-                student.load_state_dict(sd)
+                model.load_state_dict(sd)
                 if optimizer is not None:
                     optimizer.load_state_dict(checkpoint["optimizer"])
                 if scaler is not None and 'scaler' in checkpoint:
@@ -337,7 +243,7 @@ def main():
                 logging.info(f"=> resuming checkpoint '{args.resume}' (epoch {start_epoch})")
             else:
                 # loading a bare (model only) checkpoint for fine-tune or evaluation
-                student.load_state_dict(checkpoint)
+                model.load_state_dict(checkpoint)
                 logging.info(f"=> loaded checkpoint '{args.resume}' (epoch {start_epoch})")
         else:
             logging.info("=> no checkpoint found at '{}'".format(args.resume))
@@ -364,16 +270,16 @@ def main():
             config=vars(args),
         )
         if args.debug:
-            wandb.watch(student, log='all')
+            wandb.watch(model, log='all')
         #wandb.save(params_file)
         logging.debug('Finished loading wandb.')
 
     if 'train' not in data:
-        evaluate(student, text_teacher, start_epoch, preprocess_val, args, writer)
+        evaluate(model, start_epoch, preprocess_val, args, writer)
         return
     
     if is_master(args):
-        logging.info("Params:")
+        logging.info("args:")
         params_file = os.path.join(args.logs, args.name, "params.txt")
         with open(params_file, "w") as f:
             for name in sorted(vars(args)):
@@ -400,10 +306,15 @@ def main():
         
         start = time.time()
         train_one_epoch(
-            student, text_teacher, image_teacher, 
-            data, epoch, optimizer, scaler, scheduler, text_teacher_scheduler, 
-            distiller_text, distiller_image, args, writer, 
-            adaption_head=adaption_head, text_teacher_optimizer=text_teacher_optimizer, panalty_scheduler=panalty_scheduler
+            model=model, 
+            data=data, 
+            epoch=epoch, 
+            optimizer=optimizer, 
+            scaler=scaler, 
+            scheduler=scheduler,  
+            distiller=distiller, 
+            args=args, 
+            writer=writer 
             )
         if is_master(args):
             duration = (time.time()-start)/60
@@ -425,7 +336,7 @@ def main():
             checkpoint_dict = {
                 "epoch": completed_epoch,
                 "name": args.name,
-                "state_dict": student.state_dict(),
+                "state_dict": model.state_dict(),
                 "optimizer": optimizer.state_dict(),
             }
             if scaler is not None:
@@ -444,7 +355,7 @@ def main():
                     os.path.join(args.checkpoint_path, f"epoch_latest.pt"),
                 )
 
-        evaluate(student, text_teacher, completed_epoch, preprocess_val, args, writer)
+        evaluate(model, completed_epoch, preprocess_val, args, writer)
         if args.distributed:
             dist.barrier()
 

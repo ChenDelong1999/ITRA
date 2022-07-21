@@ -29,27 +29,39 @@ torchrun --nproc_per_node 4 -m training.main \
 """
 #--unlock-text-teacher --text-lr 1e-6 \
 
+conda activate protoclip
+cd /data/codes/ProtoRKD
+export PYTHONPATH="src"
+torchrun --nproc_per_node 8 -m training.main \
+    --dataset-size 2500000 --episode-size 0 --train-data 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv' \
+    --epochs 32 --save-frequency 4 --batch-size 128 --workers 8 \
+    --linear-frequency 2  --zeroshot-frequency 2 --retrieval-frequency 2  --eval-data-dir '/data/Datasets' \
+    --lr 1e-4 --warmup 2000 --wd 0.5 --max-grad-norm 100 \
+    --model RN50  --projection-n-layers 0 --augmentation protoclip-light-augmentation \
+    --text-teacher 'all-mpnet-base-v2' --image-teacher 'none' \
+    --distiller 'InfoNCE' \
+    --report-to tensorboard --logs logs/exp9_rethink_8_aug --copy-codebase --name 'Tt[all-mpnet-base-v2]_Ti[none]_S[RN50-linear-head]_[InfoNCE]_bs1024_lr1e-4_32ep(CC2.5M)'
+
 
 conda activate protoclip
 cd /data/codes/ProtoRKD
 export PYTHONPATH="src"
-torchrun --nproc_per_node 4 -m training.main \
+torchrun --nproc_per_node 1 -m training.main \
     --dataset-size 2500000 --episode-size 0 --train-data 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv' \
-    --epochs 32 --save-frequency 8 --batch-size 128 --workers 8 \
+    --epochs 32 --save-frequency 4 --batch-size 128 --workers 8 \
     --linear-frequency 2  --zeroshot-frequency 2 --retrieval-frequency 2  --eval-data-dir '/data/Datasets' \
-    --lr 1e-4 --warmup 2000 --wd 0.1 --max-grad-norm 100 \
-    --model RN50  --projection-n-layers 3 \
-    --text-teacher 'clip-ViT-B-32' --image-teacher 'none' \
-    --distiller 'InfoNCE' \
-    --report-to tensorboard --logs logs/exp9_rethink --copy-codebase --name 'Tt[clip-ViT-B-32]_Ti[none]_S[RN50]_[InfoNCE]_bs512_lr1e-4_32ep(CC2.5M)'
+    --lr 1e-4 --warmup 2000 --wd 0.5 --max-grad-norm 100 \
+    --model RN50  --projection-n-layers 0 --augmentation protoclip-light-augmentation \
+    --text-teacher 'roberta-base' --image-teacher 'none' \
+    --distiller 'InfoNCE' 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
 
 # [Datasets]
-    --train-data 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv' \
-    --train-data 's3://chendelonghahab/datasets/YFCC/YFCC_cleaned_nori.csv' \
+    --dataset-size 2500000 --episode-size 0 --train-data 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv' \
+    --dataset-size 14000000 --episode-size 2500000 --train-data 's3://chendelonghahab/datasets/YFCC/YFCC_cleaned_nori.csv' \
 
 # [Text Teachers]
     --text-teacher 'all-mpnet-base-v2' --projection-dim 768 \

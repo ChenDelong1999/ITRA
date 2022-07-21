@@ -11,10 +11,10 @@ class CLIPLoss(nn.Module):
         self.prev_num_logits = 0
         self.labels = {}
 
-    def forward(self, image_features, text_features, logit_scale=2.659):
+    def forward(self, text_features, image_features, logit_scale=2.659):
         
-        image_features = F.normalize(image_features, dim=1)
-        text_features = F.normalize(text_features, dim=1)
+        image_features = F.normalize(image_features, dim=-1)
+        text_features = F.normalize(text_features, dim=-1)
 
         device = image_features.device
         logits_per_image = logit_scale * image_features @ text_features.T

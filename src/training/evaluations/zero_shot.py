@@ -13,19 +13,23 @@ from torchvision.datasets import CIFAR10, CIFAR100, STL10
 from sklearn.metrics.cluster import adjusted_rand_score
 from sklearn.metrics import adjusted_mutual_info_score
 from training.data import ImageNet_nori
-from open_clip import tokenize as clip_tokenizer
+from training.prompt import encode_text_with_prompt
 
-
-def zero_shot_classifier(teacher, classnames, templates):
+def zero_shot_classifier(model, classnames, templates, args):
     with torch.no_grad():
         zeroshot_weights = []
         for classname in classnames:
-            texts = [template(classname) for template in templates]       
-            class_embeddings = teacher.encode(
-                texts,
-                convert_to_tensor=True, 
-                show_progress_bar=False
-                )
+            texts = [template(classname) for template in templates]    
+            
+            if args.distributed and not args.horovod:
+                class_embeddings = model.module.encode_text(texts, projection=True)
+            else:
+                class_embeddings = model.encode_text(texts, projection=True)
+            # class_embeddings = teacher.encode(
+            #     texts,
+            #     convert_to_tensor=True, 
+            #     show_progress_bar=False
+            #     )
             class_embeddings = class_embeddings.mean(dim=0)
             class_embedding = F.normalize(class_embeddings, dim=-1)
             class_embedding /= class_embedding.norm()
@@ -40,7 +44,7 @@ def accuracy(output, target, topk=(1,)):
     return [float(correct[:k].reshape(-1).float().sum(0, keepdim=True).cpu().numpy()) for k in topk]
 
 
-def run(student, classifier, dataloader, args):
+def run(model, classifier, dataloader, args):
     with torch.no_grad():
         top1, top5, n = 0., 0., 0.
         all_image_features = []
@@ -49,11 +53,9 @@ def run(student, classifier, dataloader, args):
             images = images.to(args.device)
 
             if args.distributed and not args.horovod:
-                image_features = student.module(images)
-                image_features = student.module.text_projection_head(image_features, skip_last_layer=True)
+                image_features = model.module.encode_image(images, projection=True)
             else:
-                image_features = student(images)
-                image_features = student.text_projection_head(image_features, skip_last_layer=True)
+                image_features = model.encode_image(images, projection=True)
 
             image_features = F.normalize(image_features, dim=-1)
             image_features = image_features.detach().cpu()
@@ -99,7 +101,7 @@ def clustering_evaluation(features, labels):
     return ari, ami
 
 
-def zero_shot_eval(student, teacher, zeroshot_dataset, epoch, preprocess, args):
+def zero_shot_eval(model, zeroshot_dataset, epoch, preprocess, args):
 
     if args.zeroshot_frequency == 0:
         return {}
@@ -139,11 +141,11 @@ def zero_shot_eval(student, teacher, zeroshot_dataset, epoch, preprocess, args):
         for empty_index in empty_indexs[::-1]:
             del classnames[empty_index]
     
-    classifier = zero_shot_classifier(teacher, classnames, prompt_templates)
+    classifier = zero_shot_classifier(model, classnames, prompt_templates, args)
 
     logging.info(f'Calculating image features for {zeroshot_dataset}')
     results = {}
-    top1, top5, features, labels = run(student, classifier, dataloader, args)
+    top1, top5, features, labels = run(model, classifier, dataloader, args)
     logging.info(f'{zeroshot_dataset} zero-shot accuracy: {top1:.2f}% (top5: {top5:.2f}%)')
     results[f'{zeroshot_dataset}-zeroshot-accuracy-top1'] = top1
     results[f'{zeroshot_dataset}-zeroshot-accuracy-top5'] = top5

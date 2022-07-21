@@ -8,27 +8,26 @@ from .DINO import DINOLoss
 from .SEED import SEED
 from .ProtoCPC import protocpc_loss
 
-
-def get_distiller(distiller):
-    if distiller=='SimReg':
+def get_distiller(args):
+    if args.distiller=='SimReg':
         return SimReg
-    elif distiller=='SimReg-L1':
+    elif args.distiller=='SimReg-L1':
         return SimRegL1
-    elif distiller=='SimReg-SmoothL1':
+    elif args.distiller=='SimReg-SmoothL1':
         return SimRegSmoothL1
-    elif distiller=='RKD':
+    elif args.distiller=='RKD':
         return RKD
-    elif distiller=='CompRess-2q':
+    elif args.distiller=='CompRess-2q':
         return CompReSS
-    elif distiller=='CompRess-1q':
+    elif args.distiller=='CompRess-1q':
         return CompReSSA
-    elif distiller=='SEED':
+    elif args.distiller=='SEED':
         return SEED
-    elif distiller=='InfoNCE':
+    elif args.distiller=='InfoNCE':
         return CLIPLoss
-    elif distiller=='DINO':
+    elif args.distiller=='DINO':
         return DINOLoss
-    elif distiller=='ProtoCPC':
+    elif args.distiller=='ProtoCPC':
         return protocpc_loss
 
 
