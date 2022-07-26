@@ -80,11 +80,14 @@ def get_model(args):
         args.image_dim = image_backbone.output_dim
     elif args.image_model_builder=='torchvision':
         image_backbone = torchvision.models.__dict__[args.image_model](pretrained=args.pretrained_image_model, num_classes=1000)
-        if 'resnet' in args.image_model:
+        if 'resnet' in args.image_model or 'shufflenet' in args.image_model or 'convnext' in args.image_model:
             image_backbone.output_dim = image_backbone.fc.weight.shape[1]
             image_backbone.fc=torch.nn.Identity()
         if 'alexnet' in args.image_model:
             image_backbone.output_dim = image_backbone.classifier[1].weight.shape[1]
+            image_backbone.classifier=torch.nn.Identity()
+        if 'mobilenet' in args.image_model:
+            image_backbone.output_dim = image_backbone.classifier[0].weight.shape[1]
             image_backbone.classifier=torch.nn.Identity()
         image_backbone.to(device=args.device)
         
@@ -129,7 +132,7 @@ class WrappedModel(nn.Module):
             if args.image_head_n_layers==0 and args.joint_projection_dim<0:
                 args.joint_projection_dim = self.image_dim # adaption layer
             self.text_projection_head = DINOHead(
-                in_dim=self.text_dim, out_dim=-1, bottleneck_dim=args.joint_projection_dim,
+                in_dim=self.text_dim, out_dim=1, bottleneck_dim=args.joint_projection_dim,
                 nlayers=args.text_head_n_layers, skip_last_layer=True # TODO: ProtoCPC and DINO needs this layer
                 ).to(args.device)
         else:
@@ -143,7 +146,7 @@ class WrappedModel(nn.Module):
             if args.text_head_n_layers==0 and args.joint_projection_dim<0:
                 args.joint_projection_dim = self.text_dim # adaption layer
             self.image_projection_head = DINOHead(
-                in_dim=self.image_dim, out_dim=-1, bottleneck_dim=args.joint_projection_dim,
+                in_dim=self.image_dim, out_dim=1, bottleneck_dim=args.joint_projection_dim,
                 nlayers=args.image_head_n_layers, skip_last_layer=True # TODO: ProtoCPC and DINO needs this layer
                 ).to(args.device)
         else:
@@ -164,6 +167,37 @@ class WrappedModel(nn.Module):
             image_features = self.image_projection_head(image_features)
         return image_features
 
+    def encode(self, sentences, batch_size=None, show_progress_bar=None, convert_to_numpy=True, convert_to_tensor=True): # for sentence-transofrmer evaluation
+        with torch.no_grad():
+            def _text_length(text):
+                if isinstance(text, dict):              #{key: value} case
+                    return len(next(iter(text.values())))
+                elif not hasattr(text, '__len__'):      #Object has no len() method
+                    return 1
+                elif len(text) == 0 or isinstance(text[0], int):    #Empty string or list of ints
+                    return len(text)
+                else:
+                    return sum([len(t) for t in text])      #Sum of length of individual strings
+
+            all_embeddings = []
+            length_sorted_idx = np.argsort([_text_length(sen) for sen in sentences])
+            sentences_sorted = [sentences[idx] for idx in length_sorted_idx]
+
+            for start_index in range(0, len(sentences), batch_size):
+                sentences_batch = sentences_sorted[start_index:start_index+batch_size]
+                embeddings = self.encode_text(sentences_batch, projection=True).cpu()
+                all_embeddings.extend(embeddings)
+            all_embeddings = [all_embeddings[idx] for idx in np.argsort(length_sorted_idx)]
+
+            if convert_to_tensor:
+                all_embeddings = torch.stack(all_embeddings)
+            elif convert_to_numpy:
+                all_embeddings = np.asarray([emb.numpy() for emb in all_embeddings])
+
+        
+        return all_embeddings
+
+    
     def encode_text(self, texts, projection=False):
 
         if self.text_model_builder=='OpenCLIP':

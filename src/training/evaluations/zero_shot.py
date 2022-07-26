@@ -14,12 +14,13 @@ from sklearn.metrics.cluster import adjusted_rand_score
 from sklearn.metrics import adjusted_mutual_info_score
 from training.data import ImageNet_nori
 from training.prompt import encode_text_with_prompt
+from training.evaluations.downstream_datasets import get_dataset
 
 def zero_shot_classifier(model, classnames, templates, args):
     with torch.no_grad():
         zeroshot_weights = []
         for classname in classnames:
-            texts = [template(classname) for template in templates]    
+            texts = [template.replace('{}',classname) for template in templates]    
             
             if args.distributed and not args.horovod:
                 class_embeddings = model.module.encode_text(texts, projection=True)
@@ -65,9 +66,9 @@ def run(model, classifier, dataloader, args):
             
             logits = 100. * image_features @ classifier
 
-            acc1, acc5 = accuracy(logits, target, topk=(1, 5))
+            #acc1, acc5 = accuracy(logits, target, topk=(1, 5))
+            acc1 = accuracy(logits, target, topk=(1,))[0]
             top1 += acc1
-            top5 += acc5
             n += images.size(0)
 
     top1 = 100.0 * (top1 / n)
@@ -77,7 +78,7 @@ def run(model, classifier, dataloader, args):
     all_labels = torch.cat(all_labels).numpy()
     
     
-    return top1, top5, all_image_features, all_labels
+    return round(top1, 2), top5, all_image_features, all_labels
 
 def clustering_evaluation(features, labels):
 
@@ -108,29 +109,32 @@ def zero_shot_eval(model, zeroshot_dataset, epoch, preprocess, args):
     if (epoch % args.zeroshot_frequency) != 0 and epoch != args.epochs:
         return {}
     
-    # TODO: remove nori dependency
-    if zeroshot_dataset=='imagenet':
-       dataset = ImageNet_nori(transform=preprocess, split='val')
-    elif zeroshot_dataset=='cifar10':
-        dataset = CIFAR10(root=args.eval_data_dir, download=True, train=False, transform=preprocess)
-    elif zeroshot_dataset=='cifar100':
-        dataset = CIFAR100(root=args.eval_data_dir, download=True, train=False, transform=preprocess)
-    elif zeroshot_dataset=='stl10':
-        dataset = STL10(root=args.eval_data_dir, download=True, split='test', transform=preprocess)
-    else:
-        # for ['birdsnap', 'country211', 'flowers102', 'gtsrb', 'stanford_cars', 'ucf101']
-        data_path = f'{args.eval_data_dir}/{zeroshot_dataset}/test'
-        if zeroshot_dataset == 'ucf101':
-            data_path += 'list01'
-        logging.info(f'Loading data from  {data_path}')
+    # # TODO: remove nori dependency
+    # if zeroshot_dataset=='imagenet':
+    #    dataset = ImageNet_nori(transform=preprocess, split='val')
+    # elif zeroshot_dataset=='cifar10':
+    #     dataset = CIFAR10(root=args.eval_data_dir, download=True, train=False, transform=preprocess)
+    # elif zeroshot_dataset=='cifar100':
+    #     dataset = CIFAR100(root=args.eval_data_dir, download=True, train=False, transform=preprocess)
+    # elif zeroshot_dataset=='stl10':
+    #     dataset = STL10(root=args.eval_data_dir, download=True, split='test', transform=preprocess)
+    # else:
+    #     # for ['birdsnap', 'country211', 'flowers102', 'gtsrb', 'stanford_cars', 'ucf101']
+    #     data_path = f'{args.eval_data_dir}/{zeroshot_dataset}/test'
+    #     if zeroshot_dataset == 'ucf101':
+    #         data_path += 'list01'
+    #     logging.info(f'Loading data from  {data_path}')
 
-        dataset = torchvision.datasets.ImageFolder(data_path, transform=preprocess)
+    #     dataset = torchvision.datasets.ImageFolder(data_path, transform=preprocess)
     
+    dataset = get_dataset(dataset_name=zeroshot_dataset, split='test', root=args.eval_data_dir, transform=preprocess)
+
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, num_workers=args.evaluation_workers)
 
 
     logging.info(f'Calculating text classifier for {zeroshot_dataset}')
-    classnames, prompt_templates = get_class_names_and_templets[zeroshot_dataset]
+    #classnames, prompt_templates = get_class_names_and_templets[zeroshot_dataset]
+    classnames, prompt_templates = dataset.classes, dataset.templates
     import copy
     classnames = copy.deepcopy(classnames)
     if zeroshot_dataset == 'birdsnap':
@@ -146,9 +150,9 @@ def zero_shot_eval(model, zeroshot_dataset, epoch, preprocess, args):
     logging.info(f'Calculating image features for {zeroshot_dataset}')
     results = {}
     top1, top5, features, labels = run(model, classifier, dataloader, args)
-    logging.info(f'{zeroshot_dataset} zero-shot accuracy: {top1:.2f}% (top5: {top5:.2f}%)')
+    logging.info(f'{zeroshot_dataset} zero-shot accuracy: {top1}%')
     results[f'{zeroshot_dataset}-zeroshot-accuracy-top1'] = top1
-    results[f'{zeroshot_dataset}-zeroshot-accuracy-top5'] = top5
+    #results[f'{zeroshot_dataset}-zeroshot-accuracy-top5'] = top5
 
     # clustering evaluation
     # ari, ami = clustering_evaluation(features, labels)

@@ -20,9 +20,15 @@ import logging
 #         layers.append(nn.Linear(args.projection_hidden_dim, args.projection_dim))
 #         return nn.Sequential(*layers).to(args.device)
 
+class SkipConnection(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+    
+    def forward(self, input, output):
+        return input + output
 
 class DINOHead(nn.Module):
-    def __init__(self, in_dim, out_dim, weight_norm_=True, act='gelu', use_bn=False, nlayers=3, hidden_dim=2048, bottleneck_dim=256, skip_last_layer=False):
+    def __init__(self, in_dim, out_dim, weight_norm_=True, act='gelu', use_bn=False, nlayers=3, hidden_dim=2048, bottleneck_dim=256, skip_last_layer=False, residual=False):
         super().__init__()
         nlayers = max(nlayers, 1)
 

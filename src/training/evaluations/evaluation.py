@@ -6,7 +6,7 @@ from .linear_eval import linear_eval
 from .zero_shot import zero_shot_eval
 from .coco_retrieval import coco_retrieval_evaluation
 from .analyze_features import analyze_features
-
+from .sts_evaluation import sts_benchmark
 try:
     import wandb
 except ImportError:
@@ -24,12 +24,54 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
         args.evaluation_workers = 8
     else:
         args.fast_evaluation = False
-        linear_eval_datasets = ['imagenet', 'cifar10', 'cifar100', 'stl10']
-        zeroshot_datasets = ['imagenet', 'cifar10', 'cifar100', 'stl10', 'birdsnap','country211', 'flowers102', 'gtsrb', 'ucf101','stanford_cars']
-        args.evaluation_workers = 8
+        #linear_eval_datasets = ['imagenet', 'cifar10', 'cifar100', 'stl10']
+        #zeroshot_datasets = ['imagenet', 'cifar10', 'cifar100', 'stl10', 'birdsnap','country211', 'flowers102', 'gtsrb', 'ucf101','stanford_cars']
+        zeroshot_datasets= [
+            'ImageNet', 
+            'MNIST', 
+            'CIFAR10', 
+            'CIFAR100', 
+            'STL10', 
+            'SUN397', 
+            'FGVCAircraft', 
+            'StanfordCars', 
+            'Caltech101', 
+            'DTD', 
+            'Food101', 
+            'Flowers102', 
+            'OxfordIIITPet', 
+            'EuroSAT',
+            'RenderedSST2',
+            'CLEVER',
+            ]
+        linear_eval_datasets= [
+            'MNIST', 
+            'CIFAR10', 
+            'CIFAR100', 
+            'STL10', 
+            'SUN397', 
+            'FGVCAircraft', 
+            'StanfordCars', 
+            'Caltech101', 
+            'DTD', 
+            'Food101', 
+            'Flowers102', 
+            'OxfordIIITPet', 
+            'EuroSAT',
+            'RenderedSST2',
+            'CLEVER'
+            'ImageNet', 
+            ]
+        
+        args.evaluation_workers = 16
     
     model.eval()
     all_metrics = {}
+    
+    # NLP evaluation
+    score = sts_benchmark(model, args)
+    
+    
     
     # zeroshot classification
     metrics = {}

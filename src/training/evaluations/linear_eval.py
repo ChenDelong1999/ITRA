@@ -5,8 +5,7 @@ import torch.nn as nn
 import numpy as np
 from sklearn.linear_model import LogisticRegression as sklearnLogisticRegression
 from torch.utils.data import DataLoader
-from torchvision.datasets import CIFAR10, CIFAR100, STL10, ImageFolder
-from training.data import ImageNet_nori, ImageNet_50k
+from training.evaluations.downstream_datasets import get_dataset
 from tqdm import tqdm
 import logging
 
@@ -73,14 +72,14 @@ def logistic_regression_pytorch(train_features, train_labels, test_features, tes
     train_loader = DataLoader(train_dataset, batch_size=1024, num_workers=4, pin_memory=True, persistent_workers=True)
     val_loader = DataLoader(val_dataset, batch_size=5000, num_workers=4, pin_memory=True, persistent_workers=True)
     
+    total_epochs = 500
     num_labels = int(max(train_labels)+1)
     classifier = Classifier(train_features.shape[1], num_labels).cuda()
     optimizer = torch.optim.SGD(classifier.parameters(), lr=0.1, momentum=0.9, weight_decay=1e-6)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, 100, eta_min=0)
-    
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_epochs, eta_min=0)
     criterion = nn.CrossEntropyLoss().cuda()
     best_acc = 0
-    for epoch in (pbar := tqdm(range(100))):
+    for epoch in (pbar := tqdm(range(total_epochs))):
         top1_train = AverageMeter()
         top5_train = AverageMeter()
         top1 = AverageMeter()
@@ -160,11 +159,11 @@ def knn_classifier(train_features, train_labels, test_features, test_labels, k, 
         # find the predictions that match the target
         correct = predictions.eq(targets.data.view(-1, 1))
         top1 = top1 + correct.narrow(1, 0, 1).sum().item()
-        top5 = top5 + correct.narrow(1, 0, min(5, k)).sum().item()  # top5 does not make sense if k < 5
+        #top5 = top5 + correct.narrow(1, 0, min(5, k)).sum().item()  # top5 does not make sense if k < 5
         total += targets.size(0)
     top1 = top1 * 100.0 / total
-    top5 = top5 * 100.0 / total
-    return top1, top5
+    #top5 = top5 * 100.0 / total
+    return top1#, top5
 
 
 def get_features(model, dataset, args):
@@ -187,27 +186,30 @@ def get_features(model, dataset, args):
 
 def get_dataset_features(model, dataset_name, root, preprocess, args):
 
-    if dataset_name=='cifar10':
-        train = CIFAR10(root, download=True, train=True, transform=preprocess)
-        test = CIFAR10(root, download=True, train=False, transform=preprocess)
+    # if dataset_name=='cifar10':
+    #     train = CIFAR10(root, download=True, train=True, transform=preprocess)
+    #     test = CIFAR10(root, download=True, train=False, transform=preprocess)
 
-    elif dataset_name=='cifar100':
-        train = CIFAR100(root, download=True, train=True, transform=preprocess)
-        test = CIFAR100(root, download=True, train=False, transform=preprocess)
+    # elif dataset_name=='cifar100':
+    #     train = CIFAR100(root, download=True, train=True, transform=preprocess)
+    #     test = CIFAR100(root, download=True, train=False, transform=preprocess)
 
-    elif dataset_name=='stl10':
-        train = STL10(root, download=True, split='train', transform=preprocess)
-        test = STL10(root, download=True, split='test', transform=preprocess)
-    # TODO: remove nori dependency
-    elif dataset_name=='imagenet':
-        train = ImageNet_nori(split='train', transform=preprocess)
-        test = ImageNet_nori(split='val', transform=preprocess)
-    elif dataset_name=='imagenet-50k':
-        train = ImageNet_50k(transform=preprocess)
-        test = ImageNet_nori(split='val', transform=preprocess)
-    else: 
-        train = ImageFolder(f'{args.eval_data_dir}/{dataset_name}/train', transform=preprocess)
-        test = ImageFolder(f'{args.eval_data_dir}/{dataset_name}/test', transform=preprocess)
+    # elif dataset_name=='stl10':
+    #     train = STL10(root, download=True, split='train', transform=preprocess)
+    #     test = STL10(root, download=True, split='test', transform=preprocess)
+    # # TODO: remove nori dependency
+    # elif dataset_name=='imagenet':
+    #     train = ImageNet_nori(split='train', transform=preprocess)
+    #     test = ImageNet_nori(split='val', transform=preprocess)
+    # elif dataset_name=='imagenet-50k':
+    #     train = ImageNet_50k(transform=preprocess)
+    #     test = ImageNet_nori(split='val', transform=preprocess)
+    # else: 
+    #     train = ImageFolder(f'{args.eval_data_dir}/{dataset_name}/train', transform=preprocess)
+    #     test = ImageFolder(f'{args.eval_data_dir}/{dataset_name}/test', transform=preprocess)
+
+    train = get_dataset(dataset_name=dataset_name, split='train', root=args.eval_data_dir, transform=preprocess)
+    test = get_dataset(dataset_name=dataset_name, split='test', root=args.eval_data_dir, transform=preprocess)
 
         
     # Calculate the image features
@@ -233,7 +235,7 @@ def get_linear_eval_acc(train_features, train_labels, test_features, test_labels
 
 
 def get_knn_acc(train_features, train_labels, test_features, test_labels, args):
-    top1, top5 = knn_classifier(train_features, train_labels, test_features, test_labels, 20, 0.07, num_classes=int(max(train_labels)+1))
+    top1 = knn_classifier(train_features, train_labels, test_features, test_labels, 20, 0.07, num_classes=int(max(train_labels)+1))
     return  float(top1)
 
 

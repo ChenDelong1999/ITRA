@@ -236,8 +236,11 @@ def main():
                 if not args.distributed and next(iter(sd.items()))[0].startswith('module'):
                     sd = {k[len('module.'):]: v for k, v in sd.items()}
                 model.load_state_dict(sd)
-                if optimizer is not None:
-                    optimizer.load_state_dict(checkpoint["optimizer"])
+                try:
+                    if optimizer is not None:
+                        optimizer.load_state_dict(checkpoint["optimizer"])
+                except ValueError:
+                    logging.info('optimizer param groups do not mathch. Skip resuming optimizer.')
                 if scaler is not None and 'scaler' in checkpoint:
                     scaler.load_state_dict(checkpoint['scaler'])
                 logging.info(f"=> resuming checkpoint '{args.resume}' (epoch {start_epoch})")
