@@ -19,8 +19,8 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
 
     if fast_evaluation:
         args.fast_evaluation = True
-        linear_eval_datasets = ['imagenet-50k']
-        zeroshot_datasets = ['imagenet']
+        linear_eval_datasets = ['ImageNet-50k']
+        zeroshot_datasets = ['ImageNet']
         args.evaluation_workers = 8
     else:
         args.fast_evaluation = False
@@ -59,7 +59,7 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
             'OxfordIIITPet', 
             'EuroSAT',
             'RenderedSST2',
-            'CLEVER'
+            'CLEVER',
             'ImageNet', 
             ]
         
@@ -70,6 +70,10 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
     
     # NLP evaluation
     score = sts_benchmark(model, args)
+    if tb_writer is not None:
+        tb_writer.add_scalar(f"eval_NLP_eval/sts_benchmark", score, epoch)
+    if args.wandb:
+        wandb.log({f"eval_NLP_eval/sts_benchmark": score, 'epoch': epoch})
     
     
     

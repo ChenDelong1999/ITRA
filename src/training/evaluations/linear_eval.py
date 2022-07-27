@@ -72,7 +72,7 @@ def logistic_regression_pytorch(train_features, train_labels, test_features, tes
     train_loader = DataLoader(train_dataset, batch_size=1024, num_workers=4, pin_memory=True, persistent_workers=True)
     val_loader = DataLoader(val_dataset, batch_size=5000, num_workers=4, pin_memory=True, persistent_workers=True)
     
-    total_epochs = 500
+    total_epochs = 300
     num_labels = int(max(train_labels)+1)
     classifier = Classifier(train_features.shape[1], num_labels).cuda()
     optimizer = torch.optim.SGD(classifier.parameters(), lr=0.1, momentum=0.9, weight_decay=1e-6)
@@ -81,9 +81,7 @@ def logistic_regression_pytorch(train_features, train_labels, test_features, tes
     best_acc = 0
     for epoch in (pbar := tqdm(range(total_epochs))):
         top1_train = AverageMeter()
-        top5_train = AverageMeter()
         top1 = AverageMeter()
-        top5 = AverageMeter()
         losses = AverageMeter()
 
         for step, (feature, label) in enumerate(train_loader):
@@ -94,19 +92,17 @@ def logistic_regression_pytorch(train_features, train_labels, test_features, tes
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            acc1, acc5 = accuracy(output, label, topk=(1, 5))
+            acc1 = accuracy(output, label, topk=(1, ))[0]
             losses.update(loss.item(), feature.size(0))
             top1_train.update(acc1[0], feature.size(0))
-            top5_train.update(acc5[0], feature.size(0))
         
         for step, (feature, label) in enumerate(val_loader):
             feature = feature.cuda()
             label = label.cuda()
             with torch.no_grad():
                 output = classifier(feature)
-            acc1, acc5 = accuracy(output, label, topk=(1, 5))
+            acc1 = accuracy(output, label, topk=(1, ))[0]
             top1.update(acc1[0], feature.size(0))
-            top5.update(acc5[0], feature.size(0))
 
         scheduler.step()
         

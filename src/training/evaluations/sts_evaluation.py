@@ -16,6 +16,7 @@ import torch
 import gzip
 import os
 import csv
+import argparse
 
 script_folder_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -23,10 +24,6 @@ script_folder_path = os.path.dirname(os.path.realpath(__file__))
 # torch.set_num_threads(4)
 
 # #### Just some code to print debug information to stdout
-# logging.basicConfig(format='%(asctime)s - %(message)s',
-#                     datefmt='%Y-%m-%d %H:%M:%S',
-#                     level=logging.INFO,
-#                     handlers=[LoggingHandler()])
 # #### /print debug information to stdout
 
 # model_name = sys.argv[1] if len(sys.argv) > 1 else 'all-mpnet-base-v2'
@@ -68,4 +65,3 @@ def sts_benchmark(model, args):
     result = evaluator(model_without_ddp)
     logging.info(f'Finished STS-benchmark evaluation, score: {result}')
     return result
-

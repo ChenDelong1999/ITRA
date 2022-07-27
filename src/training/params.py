@@ -37,7 +37,7 @@ def parse_args():
     )    
     parser.add_argument(
         "--text-model-builder",
-        choices=['OpenCLIP', "sentence-transformer"],
+        choices=['OpenCLIP', "sentence-transformer", "huggingface-transformer"],
         default='OpenCLIP',
         help="how to build the text model",
     ) 

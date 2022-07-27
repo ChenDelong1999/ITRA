@@ -5,8 +5,7 @@ import numpy as np
 import open_clip
 #from open_clip import trace_model, create_model_and_transforms, create_transforms, list_models, tokenize
 from sentence_transformers import SentenceTransformer
-import transformers
-from transformers import AutoTokenizer
+from transformers import AutoConfig, AutoTokenizer, AutoModel
 #from seed import models
 import torchvision
 from training.distributed import is_master
@@ -59,8 +58,17 @@ def get_model(args):
         tokenizer = None
         args.text_dim = text_backbone.get_sentence_embedding_dimension()
         args.text_width = None
-        # #text_backbone.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07)).to(args.device)
-        # text_backbone.logit_scale = torch.autograd.Variable(torch.ones([]) * np.log(1 / 0.07)).to(args.device)
+    
+    elif args.text_model_builder=='huggingface-transformer':
+        config = AutoConfig.from_pretrained(args.text_model)
+        tokenizer = AutoTokenizer.from_pretrained(args.text_model)
+        text_backbone = AutoModel.from_pretrained(args.text_model)
+        if tokenizer.pad_token is None:
+            tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+        args.text_dim = config.hidden_size
+        args.text_width = None
+        #encoded_input = tokenizer(text, return_tensors='pt')
+        #output = model(**encoded_input)
 
 
     # === image model === #
@@ -232,6 +240,17 @@ class WrappedModel(nn.Module):
             text_features = sentence_embedding
             #token_embeddings = text_features['token_embeddings']
             #text_features = token_embeddings[:, 0, :].contiguous()
+            if projection:
+                text_features = self.text_projection_head(text_features)
+            return text_features
+
+        elif self.text_model_builder=='huggingface-transformer':            
+            encoded_input = self.tokenizer(texts, padding=True, truncation=True,return_tensors="pt")
+            encoded_input = {
+                'input_ids': encoded_input['input_ids'].to(self.device),
+                'attention_mask': encoded_input['attention_mask'].to(self.device)
+                }
+            text_features = self.text_backbone(**encoded_input).last_hidden_state.mean(dim=1)
             if projection:
                 text_features = self.text_projection_head(text_features)
             return text_features
