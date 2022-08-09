@@ -60,8 +60,10 @@ if __name__ == '__main__':
     args = parse_args()
     args = load_params(params_file, args)
 
+    args.nlp_eval_frequency = 1
     args.zeroshot_frequency = 1
     args.linear_frequency = 1
+    #args.linear_prob_mode= 'pytorch-search'
     args.retrieval_frequency = 1
     args.save_logs = False
     args.distributed = False

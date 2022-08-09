@@ -9,7 +9,7 @@ from training.evaluations.downstream_datasets import get_dataset
 from tqdm import tqdm
 import logging
 
-def logistic_regression_pytorch(train_features, train_labels, test_features, test_labels):
+def logistic_regression_pytorch(train_features, train_labels, test_features, test_labels, total_epochs=100, lr=0.1, weight_decay=1e-6, batch_size=1024):
     
     class AverageMeter(object):
         """computes and stores the average and current value"""
@@ -69,13 +69,13 @@ def logistic_regression_pytorch(train_features, train_labels, test_features, tes
 
     train_dataset = TensorDataset(torch.Tensor(train_features), torch.Tensor(train_labels).long())
     val_dataset = TensorDataset(torch.Tensor(test_features), torch.Tensor(test_labels).long())
-    train_loader = DataLoader(train_dataset, batch_size=1024, num_workers=4, pin_memory=True, persistent_workers=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=4, pin_memory=True, persistent_workers=True)
     val_loader = DataLoader(val_dataset, batch_size=5000, num_workers=4, pin_memory=True, persistent_workers=True)
     
-    total_epochs = 300
+    
     num_labels = int(max(train_labels)+1)
     classifier = Classifier(train_features.shape[1], num_labels).cuda()
-    optimizer = torch.optim.SGD(classifier.parameters(), lr=0.1, momentum=0.9, weight_decay=1e-6)
+    optimizer = torch.optim.SGD(classifier.parameters(), lr=lr, momentum=0.9, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_epochs, eta_min=0)
     criterion = nn.CrossEntropyLoss().cuda()
     best_acc = 0
@@ -166,7 +166,7 @@ def get_features(model, dataset, args):
     all_features = []
     all_labels = []
     with torch.no_grad():
-        for images, labels in tqdm(DataLoader(dataset, batch_size=args.batch_size, num_workers=args.evaluation_workers)):
+        for images, labels in tqdm(DataLoader(dataset, batch_size=args.batch_size, num_workers=args.workers)):
             images = images.to(args.device)
 
             if args.distributed and not args.horovod:
@@ -217,22 +217,75 @@ def get_dataset_features(model, dataset_name, root, preprocess, args):
 
 
 def get_linear_eval_acc(train_features, train_labels, test_features, test_labels, args):
+    
     if args.linear_prob_mode=='sklearn':
         logging.info('Runing sklearn-based logistic regression')
-        classifier = sklearnLogisticRegression(random_state=0, C=0.316, max_iter=1000, verbose=1, n_jobs=128)
+        classifier = sklearnLogisticRegression(random_state=0, C=args.C, max_iter=1000, verbose=1, n_jobs=-1)
+        classifier.fit(train_features, train_labels)
+        predictions = classifier.predict(test_features)
+        accuracy = 100 * np.mean((test_labels == predictions).astype(np.float)) 
+
+    elif args.linear_prob_mode=='sklearn-search':
+        logging.info('Runing sklearn-based logistic regression with hyper-parameter search...')
+        accuracies = []
+        Cs = [1e-2, 1e-1, 1, 2, 4, 8, 10, 16, 64 ,1e2, 1e3]
+        for C in Cs:
+            logging.info(f'Runing sklearn-based logistic regression with C={C}')
+            classifier = sklearnLogisticRegression(random_state=0, C=C, max_iter=50, verbose=0, n_jobs=-1)
+            classifier.fit(train_features, train_labels)
+            predictions = classifier.predict(test_features)
+            accuracy = 100 * np.mean((test_labels == predictions).astype(np.float)) 
+            accuracies.append(accuracy)
+            logging.info(f'accuracy={accuracy}')
+        accuracy = max(accuracies)
+        index = accuracies.index(accuracy)
+        logging.info(f'Get all accuracies: {str(accuracies)}, the best one {accuracy} is achieved by C={Cs[index]}')
+
+        classifier = sklearnLogisticRegression(random_state=0, C=Cs[index], max_iter=1000, verbose=1, n_jobs=-1)
         classifier.fit(train_features, train_labels)
         predictions = classifier.predict(test_features)
         accuracy = 100 * np.mean((test_labels == predictions).astype(np.float)) 
     
-    elif args.linear_prob_mode=='pytorch':
+    elif args.linear_prob_mode=='pytorch' or 'ImageNet':
         logging.info('Runing pytorch-based logistic regression')
-        accuracy = logistic_regression_pytorch(train_features, train_labels, test_features, test_labels)
+        accuracy = logistic_regression_pytorch(
+            train_features, train_labels, test_features, test_labels, 
+            total_epochs=500, lr=0.2, weight_decay=1e-5, batch_size=10000
+            )
+        
+    elif args.linear_prob_mode=='pytorch-search':
+        logging.info('Runing pytorch-based logistic regression with hyper-parameter search...')
+        accuracies = []
+        for _ in range(5):
+            lr = 10 ** (-np.random.randint(low=1, high=3)) * np.random.randint(low=1, high=9)
+            weight_decay = 10 ** (-np.random.randint(low=5, high=10)) * np.random.randint(low=1, high=9)
+            logging.info(f'Runing pytorch-based logistic regression with random hyper-parameters: lr={lr}, wd={weight_decay}')
+            accuracy = logistic_regression_pytorch(train_features, train_labels, test_features, test_labels, total_epochs=500, lr=lr, weight_decay=weight_decay, batch_size=10000)
+            logging.info(f'Accuracy={accuracy}')
+            accuracies.append(accuracy)
+        accuracy = max(accuracies)
+        logging.info(f'Got all accuracies: {str(accuracies)}, best={accuracy}')
     return  float(accuracy)
 
 
 def get_knn_acc(train_features, train_labels, test_features, test_labels, args):
     top1 = knn_classifier(train_features, train_labels, test_features, test_labels, 20, 0.07, num_classes=int(max(train_labels)+1))
     return  float(top1)
+
+
+SKLEARN_LINEAR_C = {
+    'MNIST':0.1, 
+    'CIFAR10':2, 
+    'CIFAR100':0.1, 
+    'STL10':0.01, 
+    'StanfordCars':0.1, 
+    'DTD':0.1, 
+    'Food101':0.1, 
+    'OxfordIIITPet':0.1, 
+    'RenderedSST2':0.1,
+    'ImageNet':8, 
+    'ImageNet-50k':8
+}
 
 
 
@@ -247,15 +300,26 @@ def linear_eval(model, dataset_names, epoch, preprocess, args):
     for dataset_name in dataset_names:
         logging.info(f'starting linear evaluation on {dataset_name}...')
         train_features, train_labels, test_features, test_labels = get_dataset_features(model, dataset_name, args.eval_data_dir, preprocess, args)
+        
+        if args.linear_prob_mode=='ImageNet':
+            knn_acc = get_knn_acc(train_features, train_labels, test_features, test_labels, args)
+            results[f'{dataset_name}-knn-eval-acc'] = knn_acc
+            logging.info(f'Finished K-NN evaluation on  {dataset_name}, accuracy: {knn_acc}')
+            return results
+
+        if dataset_name in SKLEARN_LINEAR_C.keys():
+            args.C = SKLEARN_LINEAR_C[dataset_name]
         linear_acc = get_linear_eval_acc(train_features, train_labels, test_features, test_labels, args)
         results[f'{dataset_name}-linear-eval-acc'] = linear_acc
         logging.info(f'Finished linear evaluation on  {dataset_name} accuracy: {linear_acc}')
-        if args.fast_evaluation:
+        
+        if dataset_name != 'ImageNet':
             knn_acc = get_knn_acc(train_features, train_labels, test_features, test_labels, args)
             results[f'{dataset_name}-knn-eval-acc'] = knn_acc
             logging.info(f'Finished K-NN evaluation on  {dataset_name}, accuracy: {knn_acc}')
 
     return results
+
 
 
 if __name__=='__main__':

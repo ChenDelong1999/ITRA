@@ -1,6 +1,8 @@
 import os
 from PIL import Image
 import numpy as np
+import random
+import glob
 import torchvision.datasets
 from training.data import ImageNet_nori, ImageNet_50k
 from training.evaluations.openai_templets import *
@@ -18,6 +20,7 @@ AVALIABLE_DATASETS = [
     'Food101', 
     'Flowers102', 
     'OxfordIIITPet', 
+    #'GTSRB',
     'ImageNet', 
     'ImageNet-50k',
     'EuroSAT',
@@ -31,6 +34,7 @@ def get_dataset(dataset_name, split, root='/data/Datasets', transform=None):
 
     if dataset_name=='MNIST':
         dataset = torchvision.datasets.MNIST(root, train=(split=='train'), transform=transform)
+        dataset.classes = MNIST.classes
         dataset.templates = MNIST.templates
     
     elif dataset_name=='CIFAR10':
@@ -89,7 +93,8 @@ def get_dataset(dataset_name, split, root='/data/Datasets', transform=None):
         dataset.templates = OxfordPets.templates
     
     elif dataset_name=='GTSRB':
-        dataset = torchvision.datasets.GTSRB(root, download=True, split=split, transform=transform)
+        dataset = torchvision.datasets.GTSRB(root, download=False, split=split, transform=transform)
+        dataset.classes = GTSRB.classes
         dataset.templates = GTSRB.templates
     
     elif dataset_name=='ImageNet':
@@ -105,9 +110,42 @@ def get_dataset(dataset_name, split, root='/data/Datasets', transform=None):
 
     elif dataset_name=='EuroSAT':
         #dataset = torchvision.datasets.EuroSAT(root, download=True,  transform=transform)
-        if split=='test':
-            split = 'val'
-        dataset = torchvision.datasets.ImageFolder(os.path.join(root, 'eurosat', split), transform=transform)
+        # if split=='test':
+        #     split = 'val'
+        # dataset = torchvision.datasets.ImageFolder(os.path.join(root, 'eurosat', split), transform=transform)
+
+        # https://github.com/openai/CLIP/issues/45#issuecomment-926334608
+        EuroSAT_root = f"{root}/eurosat/2750"
+        seed = 42
+        random.seed(seed)
+        train_paths, valid_paths, test_paths = [], [], []
+        for folder in [os.path.basename(folder) for folder in sorted(glob.glob(os.path.join(EuroSAT_root, "*")))]:
+            keep_paths = random.sample(glob.glob(os.path.join(EuroSAT_root, folder, "*")), 1500)
+            #keep_paths = [os.path.relpath(path, EuroSAT_root) for path in keep_paths]
+            train_paths.extend(keep_paths[:1000])
+            #valid_paths.extend(keep_paths[500:1000])
+            test_paths.extend(keep_paths[1000:])
+
+        class PathDataset():
+            def __init__(self, paths, transform):
+                self.transform = transform
+                self.paths = paths
+                self.class_names = ['River', 'AnnualCrop', 'HerbaceousVegetation', 'Industrial', 'Residential', 'Highway', 'Pasture', 'Forest', 'SeaLake', 'PermanentCrop']
+
+            def __getitem__(self, index):
+                img = Image.open(self.paths[index])
+                if self.transform is not None:
+                    img = self.transform(img)
+                class_name = self.paths[index].split('/')[-1]
+                class_name = class_name.split('_')[0]
+                return img, self.class_names.index(class_name)
+
+            def __len__(self):
+                return len(self.paths)
+        if split=='train':
+            dataset = PathDataset(paths=train_paths, transform=transform)
+        elif split=='test':
+            dataset = PathDataset(paths=test_paths, transform=transform)
         dataset.classes = EuroSAT.classes
         dataset.templates = EuroSAT.templates
 
@@ -147,13 +185,46 @@ def get_dataset(dataset_name, split, root='/data/Datasets', transform=None):
         dataset.classes = CLEVERCounts.classes
         dataset.templates = CLEVERCounts.templates
 
+    
+    #zeroshot_datasets = ['imagenet', 'cifar10', 'cifar100', 'stl10', 'birdsnap','country211', 'flowers102', 'gtsrb', 'ucf101','stanford_cars']
+    # for ['birdsnap', 'country211', 'flowers102', 'gtsrb', 'stanford_cars', 'ucf101']
+    elif  dataset_name in ['birdsnap', 'country211', 'flowers102', 'ucf101']:
+        assert split == 'test'
+        data_path = f'{root}/{dataset_name}/test'
+        if dataset_name == 'ucf101':
+            data_path += 'list01'
+        dataset = torchvision.datasets.ImageFolder(data_path, transform=transform)
+
+        if dataset_name=='birdsnap':
+            dataset.classes = Birdsnap.classes
+            dataset.templates = Birdsnap.templates
+            # empty_indexs = [46, 66, 123, 299, 302, 351, 403, 436, 465]
+            # for empty_index in empty_indexs[::-1]:
+            #     del dataset.classes[empty_index]
+
+        elif dataset_name=='country211':
+            dataset.classes = Country211.classes
+            dataset.templates = Country211.templates
+
+        elif dataset_name=='flowers102':
+            dataset.classes = Flowers102.classes
+            dataset.templates = Flowers102.templates
+
+        elif dataset_name=='ucf101':
+            dataset.classes = UCF101.classes
+            dataset.templates = UCF101.templates
+
+        
+    
+    dataset.classes = [dataset.classes[i].replace('_', ' ') for i in range(len(dataset.classes))]
+    dataset.classes = [dataset.classes[i].replace('/', ' ') for i in range(len(dataset.classes))]
     return dataset
 
 if __name__=='__main__':
     #for dataset_name in AVALIABLE_DATASETS:
-    for dataset_name in ['CLEVER']:
+    for dataset_name in ['EuroSAT']:
         print('='*64)
-        for split in ['train', 'test']:
+        for split in ['test', 'train']:
             dataset = get_dataset(dataset_name, split)
             print(dataset)
             if split=='test':

@@ -10,6 +10,7 @@ from transformers import AutoConfig, AutoTokenizer, AutoModel
 import torchvision
 from training.distributed import is_master
 from training.projection import DINOHead
+from contextlib import suppress
 
 def get_model(args):
 
@@ -127,6 +128,9 @@ class WrappedModel(nn.Module):
         self.text_width = args.text_dim
         self.tokenizer = tokenizer        
         self.text_model_builder = args.text_model_builder
+        self.image_context = suppress if args.unlock_image_model else torch.no_grad
+        self.text_context = suppress if args.unlock_text_model else torch.no_grad
+        self.unlock_text_model = args.unlock_text_model
 
         # image backbone
         self.image_backbone = image_backbone
@@ -170,12 +174,14 @@ class WrappedModel(nn.Module):
 
 
     def encode_image(self, images, projection=False):
-        image_features = self.image_backbone(images)
+        with self.image_context():
+            image_features = self.image_backbone(images)
         if projection:
             image_features = self.image_projection_head(image_features)
         return image_features
 
-    def encode(self, sentences, batch_size=None, show_progress_bar=None, convert_to_numpy=True, convert_to_tensor=True): # for sentence-transofrmer evaluation
+    # text
+    def encode(self, sentences, batch_size=32, show_progress_bar=None, convert_to_numpy=True, convert_to_tensor=True): # for sentence-transofrmer evaluation
         with torch.no_grad():
             def _text_length(text):
                 if isinstance(text, dict):              #{key: value} case
@@ -207,53 +213,53 @@ class WrappedModel(nn.Module):
 
     
     def encode_text(self, texts, projection=False):
+        with self.text_context():
+            if self.text_model_builder=='OpenCLIP':
+                texts = self.tokenizer(texts, context_length=77).to(self.device)
+                def open_clip_forward(texts):
+                    x = self.text_backbone.token_embedding(texts)  # [batch_size, n_ctx, d_model]
+                    # if prompt is not None:
+                    #     batch_prompt = prompt().unsqueeze(0).expand(x.size(0), -1, -1)
+                    #     x = torch.cat([x[:, :1, :], batch_prompt, x[:, 1:, :]], dim=1)
+                    x = x + self.text_backbone.positional_embedding
+                    x = x.permute(1, 0, 2)  # NLD -> LND
+                    x = self.text_backbone.transformer(x, attn_mask=self.text_backbone.attn_mask)
+                    x = x.permute(1, 0, 2)  # LND -> NLD
+                    x = self.text_backbone.ln_final(x) # [batch_size, n_ctx, transformer.width]
+                    # take features from the eot embedding (eot_token is the highest number in each sequence)
+                    x = x[torch.arange(x.shape[0]), texts.argmax(dim=-1)] @ self.text_backbone.text_projection
+                    return x
 
-        if self.text_model_builder=='OpenCLIP':
-            texts = self.tokenizer(texts, context_length=77).to(self.device)
-            def open_clip_forward(texts):
-                x = self.text_backbone.token_embedding(texts)  # [batch_size, n_ctx, d_model]
-                # if prompt is not None:
-                #     batch_prompt = prompt().unsqueeze(0).expand(x.size(0), -1, -1)
-                #     x = torch.cat([x[:, :1, :], batch_prompt, x[:, 1:, :]], dim=1)
-                x = x + self.text_backbone.positional_embedding
-                x = x.permute(1, 0, 2)  # NLD -> LND
-                x = self.text_backbone.transformer(x, attn_mask=self.text_backbone.attn_mask)
-                x = x.permute(1, 0, 2)  # LND -> NLD
-                x = self.text_backbone.ln_final(x) # [batch_size, n_ctx, transformer.width]
-                # take features from the eot embedding (eot_token is the highest number in each sequence)
-                x = x[torch.arange(x.shape[0]), texts.argmax(dim=-1)] @ self.text_backbone.text_projection
-                return x
+                text_features = open_clip_forward(texts)
+                if projection:
+                    text_features = self.text_projection_head(text_features)
+                return text_features
+            
+            elif self.text_model_builder=='sentence-transformer':            
+                texts = self.text_backbone.tokenize(texts)
+                texts = {
+                    'input_ids': texts['input_ids'].to(self.device),
+                    'attention_mask': texts['attention_mask'].to(self.device)
+                    }
+                text_features = self.text_backbone(texts)
+                sentence_embedding = text_features['sentence_embedding']
+                text_features = sentence_embedding
+                #token_embeddings = text_features['token_embeddings']
+                #text_features = token_embeddings[:, 0, :].contiguous()
+                if projection:
+                    text_features = self.text_projection_head(text_features)
+                return text_features
 
-            text_features = open_clip_forward(texts)
-            if projection:
-                text_features = self.text_projection_head(text_features)
-            return text_features
-        
-        elif self.text_model_builder=='sentence-transformer':            
-            texts = self.text_backbone.tokenize(texts)
-            texts = {
-                'input_ids': texts['input_ids'].to(self.device),
-                'attention_mask': texts['attention_mask'].to(self.device)
-                }
-            text_features = self.text_backbone(texts)
-            sentence_embedding = text_features['sentence_embedding']
-            text_features = sentence_embedding
-            #token_embeddings = text_features['token_embeddings']
-            #text_features = token_embeddings[:, 0, :].contiguous()
-            if projection:
-                text_features = self.text_projection_head(text_features)
-            return text_features
-
-        elif self.text_model_builder=='huggingface-transformer':            
-            encoded_input = self.tokenizer(texts, padding=True, truncation=True,return_tensors="pt")
-            encoded_input = {
-                'input_ids': encoded_input['input_ids'].to(self.device),
-                'attention_mask': encoded_input['attention_mask'].to(self.device)
-                }
-            text_features = self.text_backbone(**encoded_input).last_hidden_state.mean(dim=1)
-            if projection:
-                text_features = self.text_projection_head(text_features)
-            return text_features
+            elif self.text_model_builder=='huggingface-transformer':            
+                encoded_input = self.tokenizer(texts, padding=True, truncation=True,return_tensors="pt")
+                encoded_input = {
+                    'input_ids': encoded_input['input_ids'].to(self.device),
+                    'attention_mask': encoded_input['attention_mask'].to(self.device)
+                    }
+                text_features = self.text_backbone(**encoded_input).last_hidden_state.mean(dim=1)
+                if projection:
+                    text_features = self.text_projection_head(text_features)
+                return text_features
     
     def forward(self, images, texts):
         """

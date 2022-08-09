@@ -1,4 +1,4 @@
-# 8x2080ti YFCC-14M 8 epoch
+
 
 
 # from scratch CLIP baseline
@@ -8,14 +8,14 @@ export PYTHONPATH="src"
 eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 ulimit -n 65536
 torchrun --nproc_per_node 8 -m training.main \
-    --dataset-size 14000000 --episode-size 2000000 --train-data 's3://chendelonghahab/datasets/YFCC/YFCC_cleaned_nori.csv' \
-    --epochs 56 --save-frequency 14 --batch-size 64 --workers 8 \
+    --dataset-size 14000000 --episode-size 0 --train-data 'cache/yfcc_nori.csv' \
+    --epochs 32 --save-frequency 4 --batch-size 320 --workers 8 \
     --linear-frequency 1  --zeroshot-frequency 1 --retrieval-frequency 1  --eval-data-dir '/data/Datasets' \
-    --lr 5e-4 --warmup 20000 --wd 0.5 --max-grad-norm 5 \
+    --lr 5e-4 --warmup 2000 --wd 0.5 --max-grad-norm 5 \
     --image-model 'RN50' --image-model-builder 'OpenCLIP' --unlock-image-model --image-head-n-layers 0 \
     --text-model 'RN50' --unlock-text-model --text-head-n-layers 0 \
     --distiller 'InfoNCE'\
-    --report-to tensorboard --logs 'logs/8x2080ti-YFCC14M-8ep' --copy-codebase --name 'CLIP-RN50-bs512'
+    --report-to tensorboard --logs 'logs/8xV100-YFCC14M-32ep' --copy-codebase --name 'CLIP-RN50-bs2560'
 
 
 # Stage 1, from x-transformer
@@ -25,14 +25,34 @@ export PYTHONPATH="src"
 eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 ulimit -n 65536
 torchrun --nproc_per_node 8 -m training.main \
-    --dataset-size 14000000 --episode-size 2000000 --train-data 's3://chendelonghahab/datasets/YFCC/YFCC_cleaned_nori.csv' \
-    --epochs 35 --save-frequency 35 --batch-size 64 --workers 8 \
-    --linear-frequency 1  --zeroshot-frequency 1 --retrieval-frequency 1  --eval-data-dir '/data/Datasets' \
-    --lr 5e-4 --warmup 20000 --wd 0.5 --max-grad-norm 5 \
+    --dataset-size 14000000 --episode-size 0 --train-data 'cache/yfcc_nori.csv' \
+    --epochs 32 --save-frequency 32 --batch-size 512 --workers 8 \
+    --linear-frequency 1  --zeroshot-frequency 1 --retrieval-frequency 1  --nlp-eval-frequency 1  --eval-data-dir '/data/Datasets' \
+    --lr 5e-4 --warmup 2000 --wd 0.5 --max-grad-norm 5 \
     --image-model 'RN50' --image-model-builder 'OpenCLIP' --unlock-image-model --image-head-n-layers 2 \
-    --text-model-builder 'sentence-transformer' --pretrained-text-model --text-head-n-layers 0 --text-model 'all-mpnet-base-v2' \
-    --distiller 'InfoNCE'\
-    --report-to tensorboard --logs 'logs/8x2080ti-YFCC14M-8ep' --copy-codebase --name '[:5]all-mpnet-base-v2(lock)-RN50-bs512'
+    --text-model-builder 'sentence-transformer' --pretrained-text-model --text-head-n-layers 0 --text-model 'multi-qa-mpnet-base-dot-v1' \
+    --distiller 'InfoNCE' \
+    --report-to tensorboard --logs 'logs/8xV100-YFCC14M-32ep' --copy-codebase --name 'U[RN50-h2]-L[multi-qa-mpnet-base-dot-v1]-bs4096-32ep'
+
+
+# 8x2080ti YFCC-14M 8 epoch
+# Stage 2, LiT-tuning
+conda activate protoclip
+cd /data/codes/ProtoRKD
+export PYTHONPATH="src"
+eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
+ulimit -n 65536
+torchrun --nproc_per_node 8 -m training.main \
+    --dataset-size 14000000 --episode-size 2000000 --train-data 'cache/yfcc_nori.csv' \
+    --epochs 56 --save-frequency 56 --batch-size 96 --workers 8 \
+    --linear-frequency 1  --zeroshot-frequency 1 --retrieval-frequency 1  --nlp-eval-frequency 1  --eval-data-dir '/data/Datasets' \
+    --lr 1e-4 --warmup 20000 --wd 0.5 --max-grad-norm 1 \
+    --image-model 'RN50' --image-model-builder 'OpenCLIP' --image-head-n-layers 2 \
+    --text-model-builder 'sentence-transformer' --pretrained-text-model --unlock-text-model  --text-head-n-layers 0 --text-model 'all-mpnet-base-v2' \
+    --distiller 'InfoNCE' --restart \
+    --resume 'logs/8xV100-YFCC14M-32ep/U[RN50-h2]-L[all-mpnet-base-v2]-bs4096-32ep/checkpoints/epoch_32.pt' \
+    --report-to tensorboard --logs 'logs/8x2080ti-YFCC14M-8ep-LiT' --copy-codebase --name 'L[RN50-h2]_U[microsoft-mpnet-base-h0]-bs768'
+
 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -50,6 +70,7 @@ torchrun --nproc_per_node 8 -m training.main \
     
     # sentence-transformer
     --text-model-builder 'sentence-transformer' --pretrained-text-model --text-head-n-layers 0 --text-model 'all-mpnet-base-v2' \
+    --text-model-builder 'sentence-transformer' --pretrained-text-model --text-head-n-layers 0 --text-model 'multi-qa-mpnet-base-dot-v1' \
     --text-model-builder 'sentence-transformer' --pretrained-text-model --text-head-n-layers 0 --text-model 'average_word_embeddings_glove.6B.300d' \
 
 # image model
@@ -91,3 +112,5 @@ torchrun --nproc_per_node 8 -m training.main \
 
 ## ProtoCPC
     --distiller 'ProtoCPC' \
+
+

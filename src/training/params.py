@@ -76,72 +76,14 @@ def parse_args():
         "--image-head-n-layers", type=int, default=3,
         help="how many MLP layers for image projection head",
     )
-
     parser.add_argument(
-        "--joint-projection-dim", type=int, default=-1,
+        "--joint-projection-dim", type=int, default=1024,
         help="dimension of projected representations",
     ) 
-
-    parser.add_argument(
-        "--freeze-student-backbone",
-        action="store_true",
-        default=False,
-        help="train student projection head only",
-    ) 
-    parser.add_argument(
-        "--pretrained",
-        default='',
-        type=str,
-        help="Use a pretrained CLIP model weights with the specified tag or file path.",
-    )
-    parser.add_argument(
-        "--text-teacher",
-        default='none',
-        type=str,
-        help="Load pretrained language model as text tower. See https://www.sbert.net/docs/pretrained_models.html for avaliable models",
-    )
-    # quiting adaption
-    parser.add_argument(
-        "--adaption-head",
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument(
-        "--adaption-n-layers",
-        type=int,
-        default=3,
-        help="dimension of projected representations",
-    ) 
-    parser.add_argument(
-        "--quiting-power",
-        type=int,
-        default=2,
-    )
-    parser.add_argument(
-        "--final-panalty-weight",
-        type=float,
-        default=1000.,
-    )
-    parser.add_argument(
-        "--base-panalty-weight",
-        type=float,
-        default=1e-3,
-    )
-    # quiting adaption
-    parser.add_argument(
-        "--random-text-teacher",
-        action="store_true",
-        default=False,
-    )
     parser.add_argument(
         "--unlock-text-teacher",
         action="store_true",
         default=False,
-    )
-    parser.add_argument(
-        "--text-lr",
-        type=float,
-        default=1e-5,
     )
     parser.add_argument(
         "--prompt",
@@ -296,8 +238,8 @@ def parse_args():
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     parser.add_argument("--batch-size", type=int, default=64, help="Batch size per GPU.")
     parser.add_argument("--epochs", type=int, default=32, help="Number of epochs to train for.")
+    parser.add_argument("--restart", default=False, action="store_true")
     parser.add_argument("--lr", type=float, default=None, help="Learning rate.")
-    parser.add_argument("--lr-text", type=float, default=-1., help="Seperate learning rate despite visual backbone. Leave it as -1 to use default unified learning rate")
     parser.add_argument("--beta1", type=float, default=None, help="Adam beta 1.")
     parser.add_argument("--beta2", type=float, default=None, help="Adam beta 2.")
     parser.add_argument("--eps", type=float, default=None, help="Adam epsilon.")
@@ -350,6 +292,7 @@ def parse_args():
     parser.add_argument("--zeroshot-frequency", type=int, default=0, help="How often to run zero shot.")
     parser.add_argument("--retrieval-frequency", type=int, default=0, help="How often to run coco retrieval.")
     parser.add_argument("--linear-frequency", type=int, default=0, help="How often to run linear eval.")
+    parser.add_argument("--nlp-eval-frequency", type=int, default=0, help="How often to run NLP eval.")
     parser.add_argument("--visualize-frequency", type=int, default=-1, help="How often to run linear eval.")
     parser.add_argument("--C", type=float, default=3.16, help="inverse regularizer for logistic reg (sklearn implementation).")
     parser.add_argument(
@@ -357,22 +300,6 @@ def parse_args():
         choices=["pytorch", "sklearn"],
         default="pytorch",
         help="Use witch implementation for linear evaluaion"
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default="RN50",
-        help="Name of the vision backbone to use.",
-    )
-    parser.add_argument(
-        "--open-clip-model",
-        default=False,
-        action='store_true',
-    )
-    parser.add_argument(
-        "--embed-dim",
-        type=int,
-        default=-1,
     )
     parser.add_argument(
         "--torchscript",
@@ -422,7 +349,7 @@ def parse_args():
     args = parser.parse_args()
 
     # If some params are not passed, we use the default values based on model name.
-    default_params = get_default_params(args.model)
+    default_params = get_default_params(args.image_model)
     for name, val in default_params.items():
         if getattr(args, name) is None:
             setattr(args, name, val)

@@ -18,7 +18,7 @@ import os
 import csv
 import argparse
 
-script_folder_path = os.path.dirname(os.path.realpath(__file__))
+# script_folder_path = os.path.dirname(os.path.realpath(__file__))
 
 # #Limit torch to 4 threads
 # torch.set_num_threads(4)
@@ -33,12 +33,12 @@ script_folder_path = os.path.dirname(os.path.realpath(__file__))
 # model = SentenceTransformer(model_name)
 
 
-sts_dataset_path = 'data/stsbenchmark.tsv.gz'
-
-if not os.path.exists(sts_dataset_path):
-    util.http_get('https://sbert.net/datasets/stsbenchmark.tsv.gz', sts_dataset_path)
 
 def sts_benchmark(model, args):
+    sts_dataset_path = 'data/stsbenchmark.tsv.gz'
+
+    if not os.path.exists(sts_dataset_path):
+        util.http_get('https://sbert.net/datasets/stsbenchmark.tsv.gz', sts_dataset_path)
 
     model_without_ddp = model.module if args.distributed else model
     train_samples = []

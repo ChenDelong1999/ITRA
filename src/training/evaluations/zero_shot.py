@@ -15,6 +15,7 @@ from sklearn.metrics import adjusted_mutual_info_score
 from training.data import ImageNet_nori
 from training.prompt import encode_text_with_prompt
 from training.evaluations.downstream_datasets import get_dataset
+from sklearn.metrics import confusion_matrix
 
 def zero_shot_classifier(model, classnames, templates, args):
     with torch.no_grad():
@@ -39,17 +40,33 @@ def zero_shot_classifier(model, classnames, templates, args):
     return zeroshot_weights
 
 
-def accuracy(output, target, topk=(1,)):
+def _accuracy(output, target, topk=(1,)):
     pred = output.topk(max(topk), 1, True, True)[1].t()
     correct = pred.eq(target.view(1, -1).expand_as(pred))
     return [float(correct[:k].reshape(-1).float().sum(0, keepdim=True).cpu().numpy()) for k in topk]
 
+def mean_class_accuracy(scores, labels):
+    pred = np.argmax(scores, axis=1)
+    cf = confusion_matrix(labels, pred).astype(float)
 
-def run(model, classifier, dataloader, args):
+    cls_cnt = cf.sum(axis=1)
+    cls_hit = np.diag(cf)
+
+    return np.mean(cls_hit/cls_cnt) * 100
+
+def accuracy(output, target, topk=(1,)):
+    pred = output.topk(max(topk), 1, True, True)[1].t()
+    correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+    return float(correct[0].reshape(-1).float().sum(0, keepdim=True).cpu().numpy()) * 100 / len(target)
+
+def run(model, classifier, dataloader, args, mean_per_class):
     with torch.no_grad():
         top1, top5, n = 0., 0., 0.
+        acc_mean_per_class = 0.
         all_image_features = []
         all_labels = []
+        all_logits = []
         for images, target in tqdm.tqdm(dataloader, unit_scale=args.batch_size):
             images = images.to(args.device)
 
@@ -58,27 +75,28 @@ def run(model, classifier, dataloader, args):
             else:
                 image_features = model.encode_image(images, projection=True)
 
-            image_features = F.normalize(image_features, dim=-1)
-            image_features = image_features.detach().cpu()
+            image_features = F.normalize(image_features, dim=-1).detach().cpu()
+            logits = 100. * image_features @ classifier
 
             all_image_features.append(image_features)
             all_labels.append(target)
-            
-            logits = 100. * image_features @ classifier
+            all_logits.append(logits)
 
-            #acc1, acc5 = accuracy(logits, target, topk=(1, 5))
-            acc1 = accuracy(logits, target, topk=(1,))[0]
-            top1 += acc1
-            n += images.size(0)
+            # acc1, acc5 = accuracy(logits, target, topk=(1, 5))
+            # acc1 = accuracy(logits, target, topk=(1,))[0]
+            # top1 += acc1
+            # n += images.size(0)
 
-    top1 = 100.0 * (top1 / n)
-    top5 = 100.0 * (top5 / n)
-    
     all_image_features = torch.cat(all_image_features)
-    all_labels = torch.cat(all_labels).numpy()
-    
-    
-    return round(top1, 2), top5, all_image_features, all_labels
+    all_labels = torch.cat(all_labels)
+    all_logits = torch.cat(all_logits)
+
+    if mean_per_class:    
+        logging.info('Using Mean-per-class Accuracy')
+        acc = mean_class_accuracy(all_logits, all_labels)
+    else:
+        acc = accuracy(all_logits, all_labels, topk=(1,))
+    return round(acc, 2), all_image_features, all_labels
 
 def clustering_evaluation(features, labels):
 
@@ -131,6 +149,14 @@ def zero_shot_eval(model, zeroshot_dataset, epoch, preprocess, args):
 
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, num_workers=args.evaluation_workers)
 
+    mean_per_class_datasets = [
+        'FGVCAircraft',
+        'OxfordIIITPet',
+        'Caltech101',
+        'Flowers102',
+        'flowers102'
+    ]
+
 
     logging.info(f'Calculating text classifier for {zeroshot_dataset}')
     #classnames, prompt_templates = get_class_names_and_templets[zeroshot_dataset]
@@ -149,9 +175,9 @@ def zero_shot_eval(model, zeroshot_dataset, epoch, preprocess, args):
 
     logging.info(f'Calculating image features for {zeroshot_dataset}')
     results = {}
-    top1, top5, features, labels = run(model, classifier, dataloader, args)
-    logging.info(f'{zeroshot_dataset} zero-shot accuracy: {top1}%')
-    results[f'{zeroshot_dataset}-zeroshot-accuracy-top1'] = top1
+    acc, features, labels = run(model, classifier, dataloader, args, mean_per_class = zeroshot_dataset in mean_per_class_datasets)
+    logging.info(f'{zeroshot_dataset} zero-shot accuracy: {acc}%')
+    results[f'{zeroshot_dataset}-zeroshot-acc'] = acc
     #results[f'{zeroshot_dataset}-zeroshot-accuracy-top5'] = top5
 
     # clustering evaluation

@@ -6,7 +6,8 @@ from .linear_eval import linear_eval
 from .zero_shot import zero_shot_eval
 from .coco_retrieval import coco_retrieval_evaluation
 from .analyze_features import analyze_features
-from .sts_evaluation import sts_benchmark
+#from .sts_evaluation import sts_benchmark
+from .nlp_evaluations import nlp_eval
 try:
     import wandb
 except ImportError:
@@ -24,43 +25,48 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
         args.evaluation_workers = 8
     else:
         args.fast_evaluation = False
-        #linear_eval_datasets = ['imagenet', 'cifar10', 'cifar100', 'stl10']
-        #zeroshot_datasets = ['imagenet', 'cifar10', 'cifar100', 'stl10', 'birdsnap','country211', 'flowers102', 'gtsrb', 'ucf101','stanford_cars']
         zeroshot_datasets= [
-            'ImageNet', 
-            'MNIST', 
+            'birdsnap', 
             'CIFAR10', 
             'CIFAR100', 
-            'STL10', 
-            'SUN397', 
-            'FGVCAircraft', 
-            'StanfordCars', 
-            'Caltech101', 
+            'country211',
             'DTD', 
-            'Food101', 
-            'Flowers102', 
-            'OxfordIIITPet', 
             'EuroSAT',
+            'FGVCAircraft', 
+            'flowers102', 
+            'Food101', 
+            'GTSRB',
+            'MNIST', 
+            'OxfordIIITPet', 
             'RenderedSST2',
-            'CLEVER',
+            'StanfordCars', 
+            'STL10',
+            'ucf101',
+            'ImageNet', 
+            #'Caltech101', 
+            #'Flowers102', 
+            #'SUN397', 
+            #'CLEVER'
             ]
         linear_eval_datasets= [
-            'MNIST', 
             'CIFAR10', 
             'CIFAR100', 
-            'STL10', 
-            'SUN397', 
-            'FGVCAircraft', 
-            'StanfordCars', 
-            'Caltech101', 
             'DTD', 
-            'Food101', 
-            'Flowers102', 
-            'OxfordIIITPet', 
             'EuroSAT',
+            'FGVCAircraft', 
+            'Flowers102', 
+            'Food101', 
+            'GTSRB',
+            'MNIST', 
+            'OxfordIIITPet', 
             'RenderedSST2',
-            'CLEVER',
+            'StanfordCars',
+            'STL10',  
+            'ImageNet-50k', 
             'ImageNet', 
+            #'CLEVER',
+            # 'Caltech101', 
+            # 'SUN397', 
             ]
         
         args.evaluation_workers = 16
@@ -69,11 +75,19 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
     all_metrics = {}
     
     # NLP evaluation
-    score = sts_benchmark(model, args)
-    if tb_writer is not None:
-        tb_writer.add_scalar(f"eval_NLP_eval/sts_benchmark", score, epoch)
-    if args.wandb:
-        wandb.log({f"eval_NLP_eval/sts_benchmark": score, 'epoch': epoch})
+    # score = sts_benchmark(model, args)
+    # if tb_writer is not None:
+    #     tb_writer.add_scalar(f"eval_NLP_eval/sts_benchmark", score, epoch)
+    # if args.wandb:
+    #     wandb.log({f"eval_NLP_eval/sts_benchmark": score, 'epoch': epoch})
+    # NLP evaluation
+    nlp_metrics = nlp_eval(model, epoch, args)
+    all_metrics.update(nlp_metrics)
+    for name, val in nlp_metrics.items():
+        if tb_writer is not None:
+            tb_writer.add_scalar(f"eval_nlp/{name}", val, epoch)
+        if args.wandb:
+            wandb.log({f"eval_nlp/{name}": val, 'epoch': epoch})
     
     
     

@@ -34,7 +34,9 @@ class CsvDataset(Dataset):
             df = pd.read_csv(smart_open(input_filename, "r"), sep=sep)
             self.f = None
         else:
-            self.using_nori = False
+            #self.using_nori = False
+            self.using_nori = True
+            self.f = None
             df = pd.read_csv(input_filename, sep=sep)
 
         self.images = df[img_key].tolist()

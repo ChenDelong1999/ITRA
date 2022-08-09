@@ -55,14 +55,10 @@ def main():
     args = parse_args()
     random_seed(args.seed)
 
-    # sanitize model name for filesystem / uri use, easier if we don't use / in name as a rule?
-    args.model = args.model.replace('/', '-')
-
     # get the name of the experiments
     if args.name is None:
         args.name = '-'.join([
             datetime.now().strftime("%Y_%m_%d-%H_%M_%S"),
-            f"model_{args.model}",
             f"lr_{args.lr}",
             f"b_{args.batch_size}",
             f"j_{args.workers}",
@@ -297,6 +293,8 @@ def main():
     profiling = {
         "epsidoe model training time (m)": 0,
     }
+    if args.restart:
+        start_epoch = 0
     for epoch in range(start_epoch, args.epochs):
         if is_master(args):
             logging.info(f'Start epoch {epoch}')
