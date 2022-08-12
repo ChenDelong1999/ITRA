@@ -11,10 +11,97 @@ from open_clip import tokenize as clip_tokenizer
 from zipfile import ZipFile
 from .openai_templets.ImageNet import templates as ImageNet_templates
 
+
+from sentence_transformers import  LoggingHandler, SentenceTransformer, evaluation, util, models
+import logging
+import sys
+import os
+import tarfile
 from scipy.stats import pearsonr, spearmanr
 
 autocast = torch.cuda.amp.autocast
 
+def ms_marco(model, args):
+    corpus_max_size = 0
+    ### Data files
+    data_folder = '/data/Datasets/msmarco-data'
+    os.makedirs(data_folder, exist_ok=True)
+
+    collection_filepath = os.path.join(data_folder, 'collection.tsv')
+    dev_queries_file = os.path.join(data_folder, 'queries.dev.small.tsv')
+    qrels_filepath = os.path.join(data_folder, 'qrels.dev.tsv')
+
+    ### Download files if needed
+    if not os.path.exists(collection_filepath) or not os.path.exists(dev_queries_file):
+        tar_filepath = os.path.join(data_folder, 'collectionandqueries.tar.gz')
+        if not os.path.exists(tar_filepath):
+            logging.info("Download: "+tar_filepath)
+            util.http_get('https://msmarco.blob.core.windows.net/msmarcoranking/collectionandqueries.tar.gz', tar_filepath)
+
+        with tarfile.open(tar_filepath, "r:gz") as tar:
+            tar.extractall(path=data_folder)
+
+
+    if not os.path.exists(qrels_filepath):
+        util.http_get('https://msmarco.blob.core.windows.net/msmarcoranking/qrels.dev.tsv', qrels_filepath)
+
+    ### Load data
+
+    corpus = {}             #Our corpus pid => passage
+    dev_queries = {}        #Our dev queries. qid => query
+    dev_rel_docs = {}       #Mapping qid => set with relevant pids
+    needed_pids = set()     #Passage IDs we need
+    needed_qids = set()     #Query IDs we need
+
+    # Load the 6980 dev queries
+    with open(dev_queries_file, encoding='utf8') as fIn:
+        for line in fIn:
+            qid, query = line.strip().split("\t")
+            dev_queries[qid] = query.strip()
+
+
+    # Load which passages are relevant for which queries
+    with open(qrels_filepath) as fIn:
+        for line in fIn:
+            qid, _, pid, _ = line.strip().split('\t')
+
+            if qid not in dev_queries:
+                continue
+
+            if qid not in dev_rel_docs:
+                dev_rel_docs[qid] = set()
+            dev_rel_docs[qid].add(pid)
+
+            needed_pids.add(pid)
+            needed_qids.add(qid)
+
+
+    # Read passages
+    with open(collection_filepath, encoding='utf8') as fIn:
+        for line in fIn:
+            pid, passage = line.strip().split("\t")
+            passage = passage
+
+            if pid in needed_pids or corpus_max_size <= 0 or len(corpus) <= corpus_max_size:
+                corpus[pid] = passage.strip()
+
+
+
+    ## Run evaluator
+    logging.info("Queries: {}".format(len(dev_queries)))
+    logging.info("Corpus: {}".format(len(corpus)))
+
+
+    ir_evaluator = evaluation.InformationRetrievalEvaluator(dev_queries, corpus, dev_rel_docs,
+                                                            show_progress_bar=True,
+                                                            corpus_chunk_size=100000,
+                                                            precision_recall_at_k=[10, 100],
+                                                            name="msmarco dev")
+    result = ir_evaluator(model)
+    logging.info(f'Finished MS Marco dev evaluation, score: {result}')
+    return result
+
+    
 
 def sts_benchmark(model, args):
     sts_dataset_path = os.path.join(args.eval_data_dir, 'stsbenchmark.tsv.gz')
@@ -89,7 +176,7 @@ def wiki_sections(model, args):
 def word_evaluations(model, args):
 
     def cosine_similarity(a, b):
-        return ((np.dot(a, b)) / (np.sqrt(np.dot(a, a)) * np.sqrt(np.dot(b, b))))
+        return ((np.dot(a, b)) / (np.sqrt(np.dot(a, a)) * np.sqrt(np.dot(b, b))+1e-10))
 
 
     results = []
@@ -145,6 +232,9 @@ def nlp_eval(model, epoch, args):
         
         wiki_section_result = wiki_sections(model, args)
         results['wiki-sections'] = wiki_section_result   
+
+        ms_marcro_result = ms_marco(model, args)
+        results['ms-marco'] = ms_marcro_result   
 
     return results
 

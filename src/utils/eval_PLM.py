@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 import pandas as pd
 import logging
+import sys
 
 from training.evaluations.nlp_evaluations import nlp_eval
 from training.params import parse_args
@@ -70,23 +71,14 @@ def mean_pooling(model_output, attention_mask):
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
 
-""" Teacher Zoo
-    --text-model 'RN50' --text-model-builder 'OpenCLIP' --pretrained-text-model --text-head-n-layers 0 \ CLIP-pretrained
-    --text-model-builder 'huggingface-transformer' --pretrained-text-model --text-head-n-layers 0 
-        --text-model 'roberta-large' \                              # https://huggingface.co/roberta-large
-        --text-model 'roberta-large-mnli' \                         # https://huggingface.co/roberta-large-mnli
-        --text-model 'facebook/muppet-roberta-large'                # https://huggingface.co/facebook/muppet-roberta-large
-        --text-model 'Jean-Baptiste/roberta-large-ner-english' \    # https://huggingface.co/Jean-Baptiste/roberta-large-ner-english
-        --text-model 'princeton-nlp/unsup-simcse-roberta-large'     # https://huggingface.co/princeton-nlp/unsup-simcse-roberta-large
-        --text-model 'princeton-nlp/sup-simcse-roberta-large'       # https://huggingface.co/princeton-nlp/sup-simcse-roberta-large
-        --text-model 'sentence-transformers/all-roberta-large-v1' \ # https://huggingface.co/sentence-transformers/all-roberta-large-v1
-        --text-model 'xlm-roberta-large' \                          # https://huggingface.co/xlm-roberta-large
-        --text-model 'xlm-roberta-large-finetuned-conll03-english'\ # https://huggingface.co/xlm-roberta-large-finetuned-conll03-english
-        --text-model 'deepset/xlm-roberta-large-squad2' \           # https://huggingface.co/deepset/xlm-roberta-large-squad2
-        --text-model 'joeddav/xlm-roberta-large-xnli' \             # https://huggingface.co/joeddav/xlm-roberta-large-xnli
-    --text-model-builder 'sentence-transformer' --pretrained-text-model --text-head-n-layers 0 
-        --text-model 'all-mpnet-base-v2' \
-        --text-model 'average_word_embeddings_glove.6B.300d' \
+""" usage
+conda activate protoclip
+cd /data/codes/ProtoRKD
+export PYTHONPATH="src"
+eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
+ulimit -n 65536
+python src/utils/eval_PLM.py --text-model 'joeddav/xlm-roberta-large-xnli'
+
 """
 
 if __name__=='__main__':
@@ -96,12 +88,15 @@ if __name__=='__main__':
     args.distributed = False
     args.eval_data_dir='/data/Datasets'
     args.fast_evaluation=False
-    models = [
+    model_name = args.text_model
+
+    huggingface_transformers = [
         'roberta-large',
         'roberta-large-mnli',
         'facebook/muppet-roberta-large',
         'Jean-Baptiste/roberta-large-ner-english',
         'princeton-nlp/unsup-simcse-roberta-large',
+        'princeton-nlp/sup-simcse-roberta-large',
         'sentence-transformers/all-roberta-large-v1',
         'xlm-roberta-large',
         'xlm-roberta-large-finetuned-conll03-english',
@@ -109,27 +104,27 @@ if __name__=='__main__':
         'joeddav/xlm-roberta-large-xnli'
     ]
 
-    # models = [
-    #     'average_word_embeddings_glove.6B.300d',
-    #     'clip-ViT-B-32',
-    #     'clip-ViT-B-16',
-    #     'clip-ViT-L-14',
-    #     'clip-ViT-B-32-multilingual-v1',
-    # ]
+    sentence_transformers = [
+        'average_word_embeddings_glove.6B.300d',
+        'clip-ViT-B-32',
+        'clip-ViT-B-16',
+        'clip-ViT-L-14',
+        'clip-ViT-B-32-multilingual-v1',
+    ]
 
-    df = None
-    for model_name in models:
+    if model_name in huggingface_transformers:
         model = WrappedHuggingfaceTransformer(model_name).cuda()
-        #model = SentenceTransformer(model_name).cuda()
-        results = nlp_eval(model, epoch=0, args=args)
-        results['model'] = model_name
-        logging.info( f"Finished evaluation of {model_name}\n" + "\n".join([f"\t{k}\t{v}" for k, v in results.items()]))
+    elif model_name in sentence_transformers:
+        model = SentenceTransformer(model_name).cuda()
+    else:
+        raise 'wtf?'
 
-        line = pd.DataFrame(results, index = [0])
-        if df is None:
-            df = line
-        else:
-            df = pd.concat([df, line])
-        print(df)
+
+    results = nlp_eval(model, epoch=0, args=args)
+    results['model'] = model_name
+    logging.info( f"Finished evaluation of {model_name}\n" + "\n".join([f"\t{k}\t{v}" for k, v in results.items()]))
+
+    results = pd.DataFrame(results, index = [0])
+    print(results)
         
-    df.to_csv('eval_all_RoBERTa-large.csv', sep='\t', index=None)
+    results.to_csv(f'PLM_evaluations/{model_name.replace("/", "-")}.csv', sep='\t', index=None)
