@@ -32,3 +32,4 @@ class CLIPLoss(nn.Module):
             F.cross_entropy(logits_per_text, labels)
             ) / 2
         return total_loss
+

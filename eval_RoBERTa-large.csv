@@ -1,0 +1,11 @@
+sts-benchmark	model
+0.48314516750087466	roberta-large
+0.2454121793667989	roberta-large-mnli
+0.600249085189164	facebook/muppet-roberta-large
+0.31193744038498467	Jean-Baptiste/roberta-large-ner-english
+0.8275063043385811	princeton-nlp/unsup-simcse-roberta-large
+0.8473788061817387	sentence-transformers/all-roberta-large-v1
+0.36550142557358756	xlm-roberta-large
+0.31470183915270233	xlm-roberta-large-finetuned-conll03-english
+0.5198806274700764	deepset/xlm-roberta-large-squad2
+0.38307997056994453	joeddav/xlm-roberta-large-xnli

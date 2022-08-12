@@ -27,7 +27,7 @@ except ImportError:
 
 
 class CsvDataset(Dataset):
-    def __init__(self, input_filename, transforms, img_key, caption_key, sep="\t", dataset_size=None, index_mapping=None):
+    def __init__(self, input_filename, transforms, img_key, caption_key, aug=None, sep="\t", dataset_size=None, index_mapping=None, skip_image=False):
         logging.debug(f'Loading csv data from {input_filename}.')
         if input_filename[:2]=='s3':
             self.using_nori = True
@@ -43,6 +43,7 @@ class CsvDataset(Dataset):
         self.captions = df[caption_key].tolist()
 
         self.transforms = transforms
+        self.aug = aug
         self.inversed_normalize = Compose([
             Normalize((0.0, 0.0, 0.0), (1/0.26862954, 1/0.26130258, 1/0.27577711)),
             Normalize((-0.48145466, -0.4578275, -0.40821073), (1.0, 1.0, 1.0)),
@@ -64,7 +65,8 @@ class CsvDataset(Dataset):
             self.index_mapping=torch.arange(len(self.captions))
         else:
             self.index_mapping = index_mapping
-                
+        
+        self.skip_image = skip_image
         logging.debug('Done loading data.')
 
     def __len__(self):
@@ -72,19 +74,26 @@ class CsvDataset(Dataset):
 
     def __getitem__(self, episodic_index):
         index = self.index_mapping[episodic_index]
-
-        #images = self.transforms(Image.open(str(self.images[index])))
-        if self.using_nori:
-            if self.f is None:
-                self.f = nori.Fetcher()
-            image = Image.open(io.BytesIO(self.f.get(self.images[index].decode('utf-8'))))
-        else:
-            image = Image.open(str(self.images[index].decode('utf-8')))
-        
-        image = self.transforms(image)
         texts = str(self.captions[index].decode('utf-8'))
+
+        if self.skip_image:
+            images = texts # skip image forward for efficient teacher caching 
+        else:
+            #images = self.transforms(Image.open(str(self.images[index])))
+            if self.using_nori:
+                if self.f is None:
+                    self.f = nori.Fetcher()
+                image = Image.open(io.BytesIO(self.f.get(self.images[index].decode('utf-8'))))
+            else:
+                image = Image.open(str(self.images[index].decode('utf-8')))
+            
+            image_train = self.transforms(image)
+            if self.aug is not None:
+                images = (image_train, self.aug(image))
+            else:
+                images = image_train
         
-        return episodic_index, image, texts[:100]# FIXME: '[:100]' is a temperate solution of CLIP's tokenizer overlength bug
+        return episodic_index, images, texts #[:100]# FIXME: '[:100]' is a temperate solution of CLIP's tokenizer overlength bug
     
     def get_data(self, episode_index):
         idx = self.index_mapping[episode_index]
@@ -184,17 +193,20 @@ class DataInfo:
     sampler: DistributedSampler
 
 
-def get_csv_dataset(args, preprocess_fn, is_train, index_mapping):
+def get_csv_dataset(args, preprocess_fn, aug, is_train, index_mapping):
     input_filename = args.train_data if is_train else args.val_data
     assert input_filename
     dataset = CsvDataset(
         input_filename,
         preprocess_fn,
+        aug=aug if args.BYOL else None,
         img_key=args.csv_img_key,
         caption_key=args.csv_caption_key,
         sep=args.csv_separator,
         dataset_size=args.dataset_size,
-        index_mapping=index_mapping)
+        index_mapping=index_mapping,
+        skip_image=args.cache_teacher is not None
+        )
     num_samples = len(dataset)
     sampler = DistributedSampler(dataset) if args.distributed and is_train else None
     shuffle = is_train and sampler is None
@@ -217,10 +229,10 @@ def get_csv_dataset(args, preprocess_fn, is_train, index_mapping):
 
 
 def get_data(args, preprocess_fns, index_mapping):
-    preprocess_train, preprocess_val = preprocess_fns
+    preprocess_train, preprocess_val, preprocess_aug = preprocess_fns
     data = {}
 
     if args.train_data:
-        data["train"] = get_csv_dataset(args, preprocess_train, is_train=True, index_mapping=index_mapping)
+        data["train"] = get_csv_dataset(args, preprocess_train, aug=preprocess_aug,  is_train=True, index_mapping=index_mapping)
 
     return data

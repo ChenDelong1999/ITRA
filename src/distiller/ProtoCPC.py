@@ -27,7 +27,7 @@ class ce_loss(nn.Module):
         # teacher centering and sharpening
         temp = self.teacher_temp_schedule[epoch]
         teacher_out = teacher_output / temp
-        teacher_out = teacher_out.detach()
+        #teacher_out = teacher_out.detach()
         if self.pla == 'softmax':
             teacher_out = F.softmax(teacher_out, dim=-1)
         elif self.pla == 'sk':
@@ -65,16 +65,16 @@ class protocpc_loss(nn.Module):
         ))
 
     def forward(self, teacher_output, student_output):
-        epoch = 0
         """
         Cross-entropy between softmax outputs of the teacher and student networks.
         """
         student_out = student_output / self.student_temp
         
         # teacher centering and sharpening
+        epoch = 0
         temp = self.teacher_temp_schedule[epoch]
         teacher_out = teacher_output / temp
-        teacher_out = teacher_out.detach()
+        # teacher_out = teacher_out.detach()
         if self.pla == 'softmax':
             teacher_out = F.softmax(teacher_out, dim=-1)
         elif self.pla == 'sk':
@@ -82,11 +82,12 @@ class protocpc_loss(nn.Module):
         else:
             raise NotImplementedError()
 
-        self.update_prior(teacher_out)
 
         loss_1 = -torch.sum(teacher_out * student_out, dim=1)
         loss_2 = torch.logsumexp(student_out + torch.log(self.prior), 1)
         loss = loss_1 + loss_2
+
+        self.update_prior(teacher_out)
         return loss.mean()
 
 
@@ -100,7 +101,7 @@ class protocpc_loss(nn.Module):
         # ema update
         self.prior = self.prior * self.prior_momentum + batch_prior * (1 - self.prior_momentum)
 
-@torch.no_grad()
+#@torch.no_grad()
 def sk_uniform(output, nmb_iters=3):
     Q = torch.exp(output).t() # Q is K-by-B for consistency with notations from our paper
     B = Q.shape[1] * dist.get_world_size() # number of samples to assign

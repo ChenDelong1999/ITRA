@@ -7,7 +7,6 @@ from torchvision.datasets.coco import CocoCaptions
 from torch.utils.data import Dataset, DataLoader
 from open_clip import tokenize as clip_tokenizer
 from PIL import Image
-from training.prompt import encode_text_with_prompt
 
 
 class CocoDataset(Dataset):

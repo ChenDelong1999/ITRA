@@ -1,12 +1,20 @@
 import torch
 import torch.nn as nn
 from .SimReg import SimReg, SimRegL1, SimRegSmoothL1
+from .VICReg import VICReg
+from .BarlowTwins import BarlowTwins
 from .RKD import RKD
 from .CompRess import CompReSS, CompReSSA
 from .CLIP import CLIPLoss
 from .DINO import DINOLoss
 from .SEED import SEED
 from .ProtoCPC import protocpc_loss
+
+NEED_LOGIT_SCALE = ['InfoNCE']
+NEED_GATHER = ['InfoNCE']
+UNI_DIRECTIONAL = ['CompRess-1q', 'SEED', 'DINO', 'ProtoCPC']
+NEED_PROTOTYPE_LAYER = ['DINO', 'ProtoCPC']
+
 
 def get_distiller(args):
     if args.distiller=='SimReg':
@@ -15,6 +23,10 @@ def get_distiller(args):
         return SimRegL1
     elif args.distiller=='SimReg-SmoothL1':
         return SimRegSmoothL1
+    elif args.distiller=='VICReg':
+        return VICReg
+    elif args.distiller=='BarlowTwins':
+        return BarlowTwins
     elif args.distiller=='RKD':
         return RKD
     elif args.distiller=='CompRess-2q':

@@ -38,7 +38,7 @@ class DINOLoss(nn.Module):
         #student_out = student_out.chunk(self.ncrops)
 
         # teacher centering and sharpening
-        epoch=0
+        epoch = 0
         temp = self.teacher_temp_schedule[epoch]
         teacher_out = F.softmax((teacher_output - self.center) / temp, dim=-1)
         #teacher_out = teacher_out.detach().chunk(2)

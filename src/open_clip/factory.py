@@ -145,7 +145,8 @@ def create_transforms(
 ):
     preprocess_train = image_transform(image_size, is_train=True, augmentation=args.augmentation)
     preprocess_val = image_transform(image_size, is_train=False)
-    return preprocess_train, preprocess_val
+    preprocess_aug = image_transform(image_size, is_train=False, augmentation='SLIP')
+    return preprocess_train, preprocess_val, preprocess_aug
 
 
 def list_models():

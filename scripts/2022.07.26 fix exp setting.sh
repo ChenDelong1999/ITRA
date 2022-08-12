@@ -1,7 +1,7 @@
 
 
 
-# from scratch CLIP baseline
+# Stage 1, from scratch CLIP baseline
 conda activate protoclip
 cd /data/codes/ProtoRKD
 export PYTHONPATH="src"
@@ -18,7 +18,7 @@ torchrun --nproc_per_node 8 -m training.main \
     --report-to tensorboard --logs 'logs/8xV100-YFCC14M-32ep' --copy-codebase --name 'CLIP-RN50-bs2560'
 
 
-# Stage 1, from x-transformer
+# Stage 1, w/ PLM
 conda activate protoclip
 cd /data/codes/ProtoRKD
 export PYTHONPATH="src"
@@ -26,16 +26,17 @@ eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 ulimit -n 65536
 torchrun --nproc_per_node 8 -m training.main \
     --dataset-size 14000000 --episode-size 0 --train-data 'cache/yfcc_nori.csv' \
-    --epochs 32 --save-frequency 32 --batch-size 512 --workers 8 \
+    --epochs 32 --save-frequency 32 --batch-size 160 --workers 8 \
     --linear-frequency 1  --zeroshot-frequency 1 --retrieval-frequency 1  --nlp-eval-frequency 1  --eval-data-dir '/data/Datasets' \
     --lr 5e-4 --warmup 2000 --wd 0.5 --max-grad-norm 5 \
     --image-model 'RN50' --image-model-builder 'OpenCLIP' --unlock-image-model --image-head-n-layers 2 \
-    --text-model-builder 'sentence-transformer' --pretrained-text-model --text-head-n-layers 0 --text-model 'multi-qa-mpnet-base-dot-v1' \
-    --distiller 'InfoNCE' \
-    --report-to tensorboard --logs 'logs/8xV100-YFCC14M-32ep' --copy-codebase --name 'U[RN50-h2]-L[multi-qa-mpnet-base-dot-v1]-bs4096-32ep'
+    --text-model-builder 'huggingface-transformer' --pretrained-text-model --text-head-n-layers 0 --text-model 'sentence-transformers/all-roberta-large-v1' \
+    --distiller 'InfoNCE'   --adapter 'prefix_tuning' --n-prompt 8 \
+    --report-to tensorboard --logs 'logs/Stage1' --copy-codebase --name 'U[RN50-h2]-L[all-roberta-large-v1]-bs1280-32ep-prefix_tuning_8'
+ 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-
-# 8x2080ti YFCC-14M 8 epoch
 # Stage 2, LiT-tuning
 conda activate protoclip
 cd /data/codes/ProtoRKD
@@ -44,19 +45,39 @@ eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 ulimit -n 65536
 torchrun --nproc_per_node 8 -m training.main \
     --dataset-size 14000000 --episode-size 2000000 --train-data 'cache/yfcc_nori.csv' \
-    --epochs 56 --save-frequency 56 --batch-size 96 --workers 8 \
-    --linear-frequency 1  --zeroshot-frequency 1 --retrieval-frequency 1  --nlp-eval-frequency 1  --eval-data-dir '/data/Datasets' \
+    --epochs 56 --save-frequency 56 --batch-size 64 --workers 8 \
+    --linear-frequency 0  --zeroshot-frequency 1 --retrieval-frequency 1  --nlp-eval-frequency 1  --eval-data-dir '/data/Datasets' \
+    --lr 2e-5 --warmup 20000 --wd 0.5 --max-grad-norm 1 \
+    --image-model 'RN50' --image-model-builder 'OpenCLIP' --pretrained-image-model --image-head-n-layers 0 \
+    --text-model-builder 'huggingface-transformer' --pretrained-text-model --unlock-text-model --text-head-n-layers 0 --text-model 'sentence-transformers/all-roberta-large-v1' \
+    --distiller 'InfoNCE' --restart --find-unused-parameters \
+    --report-to tensorboard --logs 'logs/Stage2' --copy-codebase --name 'L[RN50-openai-h0]_U[all-roberta-large-v1]-bs256-8ep'
+
+# Stage 2, prefix-tuning
+conda activate protoclip
+cd /data/codes/ProtoRKD
+export PYTHONPATH="src"
+eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
+ulimit -n 65536
+torchrun --nproc_per_node 8 -m training.main \
+    --dataset-size 14000000 --episode-size 2000000 --train-data 'cache/yfcc_nori.csv' \
+    --epochs 56 --save-frequency 56 --batch-size 64 --workers 8 \
+    --linear-frequency 0  --zeroshot-frequency 1 --retrieval-frequency 1  --nlp-eval-frequency 1  --eval-data-dir '/data/Datasets' \
     --lr 1e-4 --warmup 20000 --wd 0.5 --max-grad-norm 1 \
-    --image-model 'RN50' --image-model-builder 'OpenCLIP' --image-head-n-layers 2 \
-    --text-model-builder 'sentence-transformer' --pretrained-text-model --unlock-text-model  --text-head-n-layers 0 --text-model 'all-mpnet-base-v2' \
-    --distiller 'InfoNCE' --restart \
-    --resume 'logs/8xV100-YFCC14M-32ep/U[RN50-h2]-L[all-mpnet-base-v2]-bs4096-32ep/checkpoints/epoch_32.pt' \
-    --report-to tensorboard --logs 'logs/8x2080ti-YFCC14M-8ep-LiT' --copy-codebase --name 'L[RN50-h2]_U[microsoft-mpnet-base-h0]-bs768'
-
-
+    --image-model 'RN50' --image-model-builder 'OpenCLIP' --pretrained-image-model --image-head-n-layers 0 \
+    --text-model-builder 'huggingface-transformer' --pretrained-text-model --text-head-n-layers 0 --text-model 'sentence-transformers/all-roberta-large-v1' \
+    --distiller 'InfoNCE' --restart --adapter 'lang_adapter' \
+    --report-to tensorboard --logs 'logs/Stage2' --copy-codebase --name 'L[RN50-openai-h0]_L[all-roberta-large-v1]-bs512-8ep-lang_adapter'
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+# adapters
+    --adapter 'prefix_tuning' --n-prompt 1
+    --adapter 'bottleneck_adapter' 
+    --adapter 'lang_adapter'
+    --adapter 'dummy'
+    --adapter 'mam_adapter'
 
 # text model (--unlock-text-model)
     # OpenCLIP
@@ -67,6 +88,7 @@ torchrun --nproc_per_node 8 -m training.main \
     # huggingface-transformer
     --text-model-builder 'huggingface-transformer' --pretrained-text-model --text-head-n-layers 0 --text-model 'microsoft/mpnet-base' \
     --text-model-builder 'huggingface-transformer' --pretrained-text-model --text-head-n-layers 0 --text-model 'bert-base-uncased' \
+    --text-model-builder 'huggingface-transformer' --pretrained-text-model --text-head-n-layers 0 --text-model 'sentence-transformers/all-roberta-large-v1' \
     
     # sentence-transformer
     --text-model-builder 'sentence-transformer' --pretrained-text-model --text-head-n-layers 0 --text-model 'all-mpnet-base-v2' \

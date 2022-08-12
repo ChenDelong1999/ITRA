@@ -6,33 +6,6 @@ import math
 import torch.nn.functional as F
 
 
-class Teacher:
-
-    def __init__(self, cached=True, cached_feats=None, model=None):
-        self.model = model
-        self.cached_feats = cached_feats
-        self.cached = cached
-
-    def eval(self):
-        if not self.cached:
-            self.model.eval()
-
-    def gpu(self):
-        if not self.cached:
-            self.model = torch.nn.DataParallel(self.model).cuda()
-
-    def forward(self, x, indices):
-        if self.cached:
-            feats = self.cached_feats[indices]
-            feats = feats.cuda()
-        else:
-            with torch.no_grad():
-                feats = self.model(x)
-
-        feats = feats.detach()
-        return feats
-
-
 class SampleSimilarities(nn.Module):
 
     def __init__(self, feats_dim, queueSize, T):
@@ -43,7 +16,7 @@ class SampleSimilarities(nn.Module):
         self.index = 0
         stdv = 1. / math.sqrt(feats_dim / 3)
         self.register_buffer('memory', torch.rand(self.queueSize, feats_dim).mul_(2 * stdv).add_(-stdv))
-        print('using queue shape: ({},{})'.format(self.queueSize, feats_dim))
+        print('[CompRess]: using a memory bank with shape: ({},{})'.format(self.queueSize, feats_dim))
 
     def forward(self, q, update=True):
         batchSize = q.shape[0]
@@ -70,7 +43,7 @@ class CompReSS(nn.Module):
     def __init__(self , args, dim):
         super(CompReSS, self).__init__()
 
-        queue_size=128000
+        queue_size=65536
         T=0.04
         teacher_feats_dim, student_feats_dim = dim, dim
 
@@ -96,7 +69,7 @@ class CompReSSA(nn.Module):
     def __init__(self, args, dim):
         super(CompReSSA, self).__init__()
 
-        queue_size=128000
+        queue_size=65536
         T=0.04
         teacher_feats_dim = dim
         
@@ -127,7 +100,7 @@ class SampleSimilaritiesMomentum(nn.Module):
         self.index = 0
         stdv = 1. / math.sqrt(feats_dim / 3)
         self.register_buffer('memory', torch.rand(self.queueSize, feats_dim).mul_(2 * stdv).add_(-stdv))
-        print('using queue shape: ({},{})'.format(self.queueSize, feats_dim))
+        print('[CompRess]: using a memory bank with shape: ({},{})'.format(self.queueSize, feats_dim))
 
     def forward(self, q , q_key):
         batchSize = q.shape[0]

@@ -32,10 +32,9 @@ from training.data import get_data
 from training.distributed import is_master, init_distributed_device, world_info_from_env
 from training.logger import setup_logging
 from training.params import parse_args
-from training.scheduler import cosine_lr, cosine_wd
+from training.scheduler import cosine_lr
 from training.train import train_one_epoch
 from training.evaluations.evaluation import evaluate
-from training.prompt import Prompt
 
 from distiller import get_distiller
 
@@ -55,19 +54,22 @@ def main():
     args = parse_args()
     random_seed(args.seed)
 
-    # get the name of the experiments
-    if args.name is None:
-        args.name = '-'.join([
-            datetime.now().strftime("%Y_%m_%d-%H_%M_%S"),
-            f"lr_{args.lr}",
-            f"b_{args.batch_size}",
-            f"j_{args.workers}",
-            f"p_{args.precision}",
-        ])
-
     # discover initial world args early so we can log properly
     args.distributed = False
     args.local_rank, args.rank, args.world_size = world_info_from_env()
+
+    # get the name of the experiments
+    if args.name is None:
+        args.name = '-'.join([
+            'U' if args.unlock_image_model else 'L',
+            f'[{args.image_model.replace("/", "_")}-h{args.image_head_n_layers}]',
+            'U' if args.unlock_text_model else 'L',
+            f'[{args.text_model.replace("/", "_")}-h{args.text_head_n_layers}]',
+            f"b_{int(args.batch_size * args.world_size)}",
+            f"ep_{args.epochs}",
+            datetime.now().strftime("%Y_%m_%d-%H_%M_%S"),
+        ])
+    args.name.replace('/', '_')
 
     args.log_path = None
     if is_master(args, local=args.log_local):
@@ -128,7 +130,7 @@ def main():
     # Build teacher, student and distiller
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-    model, preprocess_train, preprocess_val = get_model(args)
+    model, preprocess_train, preprocess_val, preprocess_aug = get_model(args)
     
     if args.distributed and not args.horovod:
         if args.use_bn_sync:
@@ -141,7 +143,7 @@ def main():
             model, 
             device_ids=[device], 
             #broadcast_buffers=False,
-            find_unused_parameters=True,
+            find_unused_parameters=args.find_unused_parameters,
             **ddp_args, 
         )
 
@@ -163,7 +165,7 @@ def main():
         if is_master(args):
             logging.info(f"Model will be trained with epoch-wise training strategy.")
 
-    data = get_data(args, (preprocess_train, preprocess_val), index_mapping=index_mapping)
+    data = get_data(args, (preprocess_train, preprocess_val, preprocess_aug), index_mapping=index_mapping)
     if is_master(args):
         logging.info(f'Dataset initialized:')
         logging.info(f'\tdataset length: \t{len(data["train"].dataset)}')
@@ -263,7 +265,7 @@ def main():
         args.train_sz = data["train"].dataloader.num_samples
         # you will have to configure this for your project!
         wandb.init(
-            project="TrainProtoRKD",
+            project="vision-language-knowledge-distillation",
             notes=args.name,
             tags=[],
             config=vars(args),
@@ -366,6 +368,7 @@ def main():
 
 def copy_codebase(args):
     from shutil import copytree, ignore_patterns
+    args.name.replace('/', '_')
     new_code_path = os.path.join(args.logs, args.name, "code")
     if os.path.exists(new_code_path):
         print(

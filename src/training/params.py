@@ -26,6 +26,11 @@ def parse_args():
         default='SimReg',
         help="SimReg, RKD, CompRess, CompRess-1q, CLIP",
     )
+    parser.add_argument(
+        "--cache-teacher",
+        default=None, 
+        type=str,
+        )
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Knowledge Distillation Model
@@ -93,7 +98,13 @@ def parse_args():
     parser.add_argument(
         "--n-prompt",
         type=int,
-        default=0,
+        default=1,
+    )
+    parser.add_argument(
+        "--adapter",
+        type=str,
+        default=None,
+        help="Path to csv filewith training data",
     )
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Data and Episodic training
@@ -110,6 +121,11 @@ def parse_args():
         default=None,
         help="Use lighter augmentation for implicit contrast. Choices: [None, protoclip-light-augmentation]",
     ) 
+    parser.add_argument(
+        "--BYOL",
+        action="store_true",
+        default=False,
+    )
     parser.add_argument(
         "--eval-data-dir",
         type=str,
@@ -336,6 +352,11 @@ def parse_args():
         default=False,
         action='store_true',
         help="Enable static graph optimization for DDP in PyTorch >= 1.11.",
+    )
+    parser.add_argument(
+        "--find-unused-parameters",
+        default=False,
+        action='store_true',
     )
     parser.add_argument(
         "--no-set-device-rank",

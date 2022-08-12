@@ -30,9 +30,11 @@ class SkipConnection(nn.Module):
 class DINOHead(nn.Module):
     def __init__(self, in_dim, out_dim, weight_norm_=True, act='gelu', use_bn=False, nlayers=3, hidden_dim=2048, bottleneck_dim=256, skip_last_layer=False, residual=False):
         super().__init__()
-        nlayers = max(nlayers, 1)
 
-        if nlayers == 1:
+        if nlayers == 0:
+            self.mlp = nn.Identity()
+            bottleneck_dim = in_dim
+        elif nlayers == 1:
             self.mlp = nn.Linear(in_dim, bottleneck_dim)
         else:
             layers = [nn.Linear(in_dim, hidden_dim)]

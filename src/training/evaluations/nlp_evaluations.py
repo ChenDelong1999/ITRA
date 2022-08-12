@@ -44,9 +44,24 @@ def sts_benchmark(model, args):
     evaluator = EmbeddingSimilarityEvaluator.from_input_examples(test_samples, name='sts-test')
     #result = model_without_ddp.evaluate(evaluator)
     result = evaluator(model)
-    logging.info(f'Finished sts evaluation, score: {result}')
+    logging.info(f'Finished sts-b evaluation, score: {result}')
     return result
 
+
+def sts_coco(model, args):
+    samples = []
+    with open('STS_coco_val2017.csv') as fIn:
+        reader = csv.DictReader(fIn, delimiter='\t', quoting=csv.QUOTE_NONE)
+        for row in reader:
+            score = float(row['score'])
+            inp_example = InputExample(texts=[row['sentence1'], row['sentence2']], label=score)
+            samples.append(inp_example)
+
+    evaluator = EmbeddingSimilarityEvaluator.from_input_examples(samples, name='sts-coco')
+    #result = model_without_ddp.evaluate(evaluator)
+    result = evaluator(model)
+    logging.info(f'Finished sts-coco evaluation, score: {result}')
+    return result
 
 
 def wiki_sections(model, args):
@@ -124,6 +139,9 @@ def nlp_eval(model, epoch, args):
         results['rg65'] = rg65
         results['wordsim353'] = wordsim353
         results['simlex999'] = simlex999
+        
+        sts_result = sts_coco(model, args)
+        results['sts-coco'] = sts_result
         
         wiki_section_result = wiki_sections(model, args)
         results['wiki-sections'] = wiki_section_result   

@@ -5,6 +5,10 @@ import numpy as np
 import torch
 from torch import nn
 from torchvision.transforms import transforms
+import random 
+from PIL import ImageFilter
+
+
 
 def _convert_to_rgb(image):
     return image.convert('RGB')
@@ -26,6 +30,7 @@ def image_transform(
                 ToTensor(),
                 normalize,
             ])
+
         elif augmentation == 'protoclip-light-augmentation':
             s = 1
             size = image_size
@@ -41,6 +46,32 @@ def image_transform(
                 transforms.ToTensor(),
                 normalize
                 ])
+
+        elif augmentation == 'SLIP':
+            class GaussianBlur(object):
+                """Gaussian blur augmentation in SimCLR https://arxiv.org/abs/2002.05709"""
+
+                def __init__(self, sigma=[.1, 2.]):
+                    self.sigma = sigma
+
+                def __call__(self, x):
+                    sigma = random.uniform(self.sigma[0], self.sigma[1])
+                    x = x.filter(ImageFilter.GaussianBlur(radius=sigma))
+                    return x
+
+            return transforms.Compose([
+                transforms.RandomResizedCrop(224, scale=(0.08, 1.)),
+                _convert_to_rgb,
+                transforms.RandomApply([
+                    transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
+                ], p=0.8),
+                transforms.RandomGrayscale(p=0.2),
+                transforms.RandomApply([GaussianBlur([.1, 2.])], p=0.5),
+                transforms.RandomHorizontalFlip(),
+                transforms.ToTensor(),
+                normalize,
+            ])
+
         
     else:
         return Compose([

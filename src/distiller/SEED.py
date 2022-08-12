@@ -33,11 +33,11 @@ class SEED(nn.Module):
         super(SEED, self).__init__()
         
         #dim=args.projection_dim
-        self.K = 128000
+        self.K = 65536
         self.t = 0.07
         self.temp = 1e-4
         self.dim = dim
-        self.dist = True
+        self.dist = args.distributed
 
         # create the Teacher/Student encoders
         # num_classes is the output fc dimension
@@ -125,12 +125,5 @@ class SEED(nn.Module):
         # de-queue and en-queue
         self._dequeue_and_enqueue(t_emb, concat=self.dist)
 
-        #return logit_stu, logit_tea
-        #def soft_cross_entropy(student_logit, teacher_logit):
-        '''
-        :param student_logit: logit of the student arch (without softmax norm)
-        :param teacher_logit: logit of the teacher arch (already softmax norm)
-        :return: CE loss value.
-        '''
         return -(logit_tea * torch.nn.functional.log_softmax(logit_stu, 1)).sum()/logit_stu.shape[0]
 
