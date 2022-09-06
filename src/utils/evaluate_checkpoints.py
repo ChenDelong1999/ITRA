@@ -18,7 +18,7 @@ logging.basicConfig(format='%(asctime)s: %(message)s', level=logging.INFO)
 def evaluate_checkpoint(checkpoint_path, epoch, args):
     # load model
 
-    model, preprocess_train, preprocess_val = get_model(args)
+    model, preprocess_train, preprocess_val, preprocess_aug = get_model(args)
 
     checkpoint = torch.load(checkpoint_path, map_location=device)
     sd = checkpoint["state_dict"]

@@ -9,7 +9,7 @@ from training.evaluations.downstream_datasets import get_dataset
 from tqdm import tqdm
 import logging
 
-def logistic_regression_pytorch(train_features, train_labels, test_features, test_labels, total_epochs=100, lr=0.1, weight_decay=1e-6, batch_size=1024):
+def logistic_regression_pytorch(train_features, train_labels, test_features, test_labels, total_epochs=100, lr=0.004, weight_decay=0, batch_size=1024):
     
     class AverageMeter(object):
         """computes and stores the average and current value"""
@@ -250,7 +250,7 @@ def get_linear_eval_acc(train_features, train_labels, test_features, test_labels
         logging.info('Runing pytorch-based logistic regression')
         accuracy = logistic_regression_pytorch(
             train_features, train_labels, test_features, test_labels, 
-            total_epochs=500, lr=0.2, weight_decay=1e-5, batch_size=10000
+            #total_epochs=500, lr=0.2, weight_decay=1e-5, batch_size=10000
             )
         
     elif args.linear_prob_mode=='pytorch-search':

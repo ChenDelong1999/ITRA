@@ -47,12 +47,12 @@ torchrun --nproc_per_node 8 -m training.main \
     --linear-frequency 1  --zeroshot-frequency 1 --retrieval-frequency 1  --nlp-eval-frequency 1  --eval-data-dir '/data/Datasets' \
     --lr 1e-4 --warmup 2000 --wd 0.5 --max-grad-norm 5 \
     --image-model 'RN50' --image-model-builder 'OpenCLIP' --unlock-image-model --image-head-n-layers 2 \
-    --text-model-builder 'huggingface-transformer' --pretrained-text-model --text-head-n-layers 0 --text-model 'xlm-roberta-large-finetuned-conll03-english' \
+    --text-model 'RN50' --text-model-builder 'OpenCLIP' --pretrained-text-model --text-head-n-layers 0 \
     --distiller 'InfoNCE' \
-    --report-to tensorboard --logs 'logs/Stage1-ablation' --copy-codebase --name 'U[RN50-h2]-L[xlm-roberta-large-finetuned-conll03-english]-bs800-8ep'
+    --report-to tensorboard --logs 'logs/Stage1-ablation' --copy-codebase --name 'U[RN50-h2]-L[CLIP-RN50]-bs800-8ep'
     
 # Teacher Zoo
-    --text-model 'RN50' --text-model-builder 'OpenCLIP' --pretrained-text-model --text-head-n-layers 0 \ CLIP-pretrained
+    --text-model 'RN50' --text-model-builder 'OpenCLIP' --pretrained-text-model --text-head-n-layers 0 \CLIP-pretrained
     --text-model-builder 'huggingface-transformer' --pretrained-text-model --text-head-n-layers 0 
         --text-model 'roberta-large' \                              # https://huggingface.co/roberta-large
         --text-model 'roberta-large-mnli' \                         # https://huggingface.co/roberta-large-mnli

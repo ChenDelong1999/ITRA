@@ -12,12 +12,12 @@ from training.distributed import is_master
 from training.projection import DINOHead
 from training.prompt import Prompt
 
-from transformers.adapters import PrefixTuningConfig
-from transformers.adapters import AdapterConfig
-from transformers.adapters import PfeifferInvConfig
-#from transformers.adapters import LoRAConfig
-from transformers.adapters import CompacterConfig            
-from transformers.adapters import MAMConfig
+# from transformers.adapters import PrefixTuningConfig
+# from transformers.adapters import AdapterConfig
+# from transformers.adapters import PfeifferInvConfig
+# #from transformers.adapters import LoRAConfig
+# from transformers.adapters import CompacterConfig            
+# from transformers.adapters import MAMConfig
 
 from distiller import NEED_LOGIT_SCALE, NEED_PROTOTYPE_LAYER
 
@@ -254,7 +254,7 @@ class WrappedModel(nn.Module):
 
             for start_index in range(0, len(sentences), batch_size):
                 sentences_batch = sentences_sorted[start_index:start_index+batch_size]
-                embeddings = self.encode_text(sentences_batch, projection=False).cpu()
+                embeddings = self.encode_text(sentences_batch, projection=True).cpu()
                 all_embeddings.extend(embeddings)
             all_embeddings = [all_embeddings[idx] for idx in np.argsort(length_sorted_idx)]
 

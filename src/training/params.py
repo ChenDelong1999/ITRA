@@ -55,6 +55,10 @@ def parse_args():
         help="train text?",
     )
     parser.add_argument(
+        "--freeze-text-head", action="store_true", default=False,
+        help="train text?",
+    )
+    parser.add_argument(
         "--text-head-n-layers", type=int, default=3,
         help="how many MLP layers for text projection head",
     )
@@ -76,6 +80,9 @@ def parse_args():
     parser.add_argument(
         "--unlock-image-model", action="store_true", default=False,
         help="train image?",
+    )
+    parser.add_argument(
+        "--freeze-image-head", action="store_true", default=False,
     )
     parser.add_argument(
         "--image-head-n-layers", type=int, default=3,

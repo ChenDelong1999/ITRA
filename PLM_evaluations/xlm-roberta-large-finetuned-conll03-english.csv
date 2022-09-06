@@ -1,2 +1,2 @@
-sts-benchmark	model
-0.31470183915270233	xlm-roberta-large-finetuned-conll03-english
+sts-benchmark	captioned_imagenet	model
+0.3147017269076447	38.22200012207031	xlm-roberta-large-finetuned-conll03-english

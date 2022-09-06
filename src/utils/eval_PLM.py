@@ -77,7 +77,7 @@ cd /data/codes/ProtoRKD
 export PYTHONPATH="src"
 eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 ulimit -n 65536
-python src/utils/eval_PLM.py --text-model 'joeddav/xlm-roberta-large-xnli'
+python src/utils/eval_PLM.py --text-model 'princeton-nlp/sup-simcse-roberta-large'
 
 """
 
@@ -88,6 +88,9 @@ if __name__=='__main__':
     args.distributed = False
     args.eval_data_dir='/data/Datasets'
     args.fast_evaluation=False
+    args.linear_prob_mode='pytorch'
+    args.batch_size=2048
+    num_workers=8
     model_name = args.text_model
 
     huggingface_transformers = [

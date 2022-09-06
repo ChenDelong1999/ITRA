@@ -141,9 +141,9 @@ class ImageNet_nori(Dataset):
         raw_img = Image.open(io.BytesIO(self.f.get(ls[0])))
         if self.transform is not None:
             img = self.transform(raw_img)
+            raw_img.close()
         else:
             img = raw_img
-        raw_img.close()
         label = int(ls[1])
 
         return img, label

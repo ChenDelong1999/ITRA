@@ -1,6 +1,7 @@
 import gzip
 import os
 import csv
+from click import progressbar
 from sentence_transformers import SentenceTransformer,  util, LoggingHandler, InputExample
 from sentence_transformers.evaluation import EmbeddingSimilarityEvaluator, TripletEvaluator
 import logging
@@ -10,7 +11,9 @@ import numpy as np
 from open_clip import tokenize as clip_tokenizer
 from zipfile import ZipFile
 from .openai_templets.ImageNet import templates as ImageNet_templates
-
+from tqdm import tqdm
+from torch.utils.data import DataLoader
+from training.evaluations.linear_eval import get_linear_eval_acc
 
 from sentence_transformers import  LoggingHandler, SentenceTransformer, evaluation, util, models
 import logging
@@ -18,6 +21,8 @@ import sys
 import os
 import tarfile
 from scipy.stats import pearsonr, spearmanr
+from utils.image_captioning import CaptionedImageNet
+
 
 autocast = torch.cuda.amp.autocast
 
@@ -210,6 +215,23 @@ def word_evaluations(model, args):
     return results
 
 
+
+def imagenet_linear(model, args):
+    train = CaptionedImageNet(path='data/captioned_imagenet', split='train', preprocess=None)
+    test = CaptionedImageNet(path='data/captioned_imagenet', split='val', preprocess=None)
+       
+    #train_features, train_labels = get_features(model, train, args=args)
+    #test_features, test_labels = get_features(model, test, args=args)
+    print(len(train.captions))
+    train_features = model.encode(train.captions)
+    train_labels = train.labels
+    print(len(test.captions))
+    test_features = model.encode(test.captions)
+    test_labels = test.labels
+    
+    linear_acc = get_linear_eval_acc(train_features, train_labels, test_features, test_labels, args)
+    return  linear_acc
+
 def nlp_eval(model, epoch, args):
     model = model.module if args.distributed else model
     if args.nlp_eval_frequency == 0:
@@ -222,19 +244,22 @@ def nlp_eval(model, epoch, args):
     results['sts-benchmark'] = sts_result
 
     if not args.fast_evaluation:
-        rg65, simlex999, wordsim353 = word_evaluations(model, args)
-        results['rg65'] = rg65
-        results['wordsim353'] = wordsim353
-        results['simlex999'] = simlex999
+        captioned_imagenet = imagenet_linear(model, args)
+        results['captioned_imagenet'] = captioned_imagenet
         
-        sts_result = sts_coco(model, args)
-        results['sts-coco'] = sts_result
+        # rg65, simlex999, wordsim353 = word_evaluations(model, args)
+        # results['rg65'] = rg65
+        # results['wordsim353'] = wordsim353
+        # results['simlex999'] = simlex999
         
-        wiki_section_result = wiki_sections(model, args)
-        results['wiki-sections'] = wiki_section_result   
+        # sts_result = sts_coco(model, args)
+        # results['sts-coco'] = sts_result
+        
+        # wiki_section_result = wiki_sections(model, args)
+        # results['wiki-sections'] = wiki_section_result   
 
-        ms_marcro_result = ms_marco(model, args)
-        results['ms-marco'] = ms_marcro_result   
+        # ms_marcro_result = ms_marco(model, args)
+        # results['ms-marco'] = ms_marcro_result   
 
     return results
 
