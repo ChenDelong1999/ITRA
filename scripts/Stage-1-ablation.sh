@@ -57,12 +57,12 @@ torchrun --nproc_per_node 8 -m training.main \
         --text-model 'roberta-large' \                              # https://huggingface.co/roberta-large
         --text-model 'roberta-large-mnli' \                         # https://huggingface.co/roberta-large-mnli
         --text-model 'facebook/muppet-roberta-large'                # https://huggingface.co/facebook/muppet-roberta-large
-        ?--text-model 'Jean-Baptiste/roberta-large-ner-english' \    # https://huggingface.co/Jean-Baptiste/roberta-large-ner-english
+        --text-model 'Jean-Baptiste/roberta-large-ner-english' \    # https://huggingface.co/Jean-Baptiste/roberta-large-ner-english
         --text-model 'princeton-nlp/unsup-simcse-roberta-large'     # https://huggingface.co/princeton-nlp/unsup-simcse-roberta-large
         --text-model 'princeton-nlp/sup-simcse-roberta-large'       # https://huggingface.co/princeton-nlp/sup-simcse-roberta-large
         --text-model 'sentence-transformers/all-roberta-large-v1' \ # https://huggingface.co/sentence-transformers/all-roberta-large-v1
-        ?--text-model 'xlm-roberta-large' \                          # https://huggingface.co/xlm-roberta-large
-        ?--text-model 'xlm-roberta-large-finetuned-conll03-english'\ # https://huggingface.co/xlm-roberta-large-finetuned-conll03-english
+        --text-model 'xlm-roberta-large' \                          # https://huggingface.co/xlm-roberta-large
+        --text-model 'xlm-roberta-large-finetuned-conll03-english'\ # https://huggingface.co/xlm-roberta-large-finetuned-conll03-english
         --text-model 'deepset/xlm-roberta-large-squad2' \           # https://huggingface.co/deepset/xlm-roberta-large-squad2
         --text-model 'joeddav/xlm-roberta-large-xnli' \             # https://huggingface.co/joeddav/xlm-roberta-large-xnli
     --text-model-builder 'sentence-transformer' --pretrained-text-model --text-head-n-layers 0 

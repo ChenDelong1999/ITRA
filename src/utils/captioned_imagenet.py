@@ -14,7 +14,7 @@ class CaptionedImageNet():
             self.caption_dataset = pd.read_csv(f'{path}/captioned-ImageNet-train-rank_0.csv')  
             for i in range(1,8):    
                 self.caption_dataset = pd.concat([self.caption_dataset, pd.read_csv(f'{path}/captioned-ImageNet-train-rank_{i}.csv')])  
-            print(self.caption_dataset)
+        #print(self.caption_dataset)
         self.captions = list(self.caption_dataset['caption'].astype(str).values)
         self.indexs = list(self.caption_dataset['index'].values)
 

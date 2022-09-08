@@ -5,6 +5,8 @@ import nori2 as nori
 import io
 from PIL import Image
 import pandas as pd
+import numpy as np
+from training.evaluations.openai_templets.ImageNet import classes as imagenet_classnames
 
 class ImageNetCaptions():
 
@@ -98,11 +100,15 @@ if __name__=='__main__':
     print(imagenet_captions.labels[:500])
     print(len(imagenet_captions.labels))
 
+    imagenet_classnames = np.array(imagenet_classnames)
+
     df = pd.DataFrame(data={
         'label':imagenet_captions.labels,
+        'class_name':imagenet_classnames[imagenet_captions.labels],
         'file_name':imagenet_captions.images,
         'caption':imagenet_captions.captions,
     })
-    df.to_csv('ImageNet_captions_labeled.csv',index=False, sep='\t')
+    print(df)
+    df.to_csv('data/ImageNet_captions_labeled.csv',index=False, sep='\t')
 
     

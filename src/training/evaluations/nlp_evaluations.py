@@ -21,7 +21,7 @@ import sys
 import os
 import tarfile
 from scipy.stats import pearsonr, spearmanr
-from utils.image_captioning import CaptionedImageNet
+from utils.captioned_imagenet import CaptionedImageNet
 
 
 autocast = torch.cuda.amp.autocast

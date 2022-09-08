@@ -1,84 +1,77 @@
-from ctypes import alignment
-from training.evaluations.coco_retrieval import CocoCaptions, CocoDataset, CocoTexts
-import tqdm
-import os
-import random
-import torch
-import pandas as pd
-import numpy as np
-from sentence_transformers import SentenceTransformer
-from torch import nn
-
 
 import torch
 import torch.nn as nn
-import numpy as np
+import os
 import pandas as pd
-import logging
-import sys
+import numpy as np
+from torch import nn
+from training.evaluations.coco_retrieval import CocoCaptions
 
-from training.evaluations.nlp_evaluations import nlp_eval
-from training.params import parse_args
 
 from transformers import AutoConfig, AutoTokenizer, AutoModel
 from sentence_transformers import SentenceTransformer
 
-logging.basicConfig(format='%(asctime)s: %(message)s', level=logging.INFO)
+from mutual_information.transrate import transrate
+from mutual_information.logme import log_maximum_evidence
+from mutual_information.hscore import h_score
 
-eval_data_dir = '/data/Datasets'
-coco_val_root = os.path.join(eval_data_dir, 'coco2017/val2017')
-coco_val_json = os.path.join(eval_data_dir, 'coco2017/annotations/captions_val2017.json')
-coco_train_root = os.path.join(eval_data_dir, 'coco2017/train2017')
-coco_train_json = os.path.join(eval_data_dir, 'coco2017/annotations/captions_train2017.json')
-
-#coco_dataset = CocoCaptions(root=coco_train_root, annFile=coco_train_json)
-coco_dataset = CocoCaptions(root=coco_val_root, annFile=coco_val_json)
+from openTSNE import TSNE
+from utils.captioned_imagenet import CaptionedImageNet
+import matplotlib.pyplot as plt
 
 
-
-def TransRate_estimator(features, labels):
-    eps = 1e-4
-    n, d = features.shape
-    features = features - np.mean(features, axis=0, keepdims=True)
+def get_coco(split='val'):
     
-    def coding_rate(features):
-        (_, rate) = np.linalg.slogdet((np.eye(d) + 1/(n*eps) * features.transpose() @ features))
-        return 0.5 * rate
+    eval_data_dir = '/data/Datasets'
+    coco_val_root = os.path.join(eval_data_dir, 'coco2017/val2017')
+    coco_val_json = os.path.join(eval_data_dir, 'coco2017/annotations/captions_val2017.json')
+    coco_train_root = os.path.join(eval_data_dir, 'coco2017/train2017')
+    coco_train_json = os.path.join(eval_data_dir, 'coco2017/annotations/captions_train2017.json')
+
+    if split=='val':
+        coco_dataset = CocoCaptions(root=coco_val_root, annFile=coco_val_json)
+    elif split=='train':
+        coco_dataset = CocoCaptions(root=coco_train_root, annFile=coco_train_json)
+
+    all_labels = []
+    all_captions = []
+
+    for i in range(len(coco_dataset)):
+        texts = coco_dataset._load_target(coco_dataset.ids[i])
+        all_labels.extend([i]*len(texts))
+        all_captions.extend(texts)
     
-    RZ = coding_rate(features)
-    RZY = 0.
-    K = int(labels.max() + 1)
-    for i in range(K):
-        RZY += coding_rate(features[(labels==i).flatten()])
-    
-    return RZ - RZY / K
+    all_labels = np.array(all_labels)
 
-
-def get_feature_and_label(model):
-    # all_labels = []
-    # all_tests = []
-
-    # for i in range(len(coco_dataset)):
-    #     #texts = coco_dataset[i][1]
-    #     texts = coco_dataset._load_target(coco_dataset.ids[i])
-    #     all_labels.extend([i]*len(texts))
-    #     all_tests.extend(texts)
+    return all_captions, all_labels
         
-    # all_features = model.encode(all_tests, convert_to_tensor=True).cpu().numpy()
-    # #all_features = torch.nn.functional.normalize(all_features, dim=-1)
 
-    # all_labels = np.array(all_labels)
-    
-    # print(all_labels, all_features)
-    # print(all_labels.shape, all_features.shape)
-
+def get_imagenet_captions():
     df = pd.read_csv('data/ImageNet_captions_labeled.csv', sep='\t',  lineterminator='\n')
-    print(df)
     all_labels = np.array(df['label'].values.tolist())
-    all_caption = df['caption'].values.tolist()
-    all_features = model.encode(all_caption, convert_to_tensor=True).cpu().numpy()
+    all_captions = df['caption'].values.tolist()
 
-    return all_features, all_labels
+    return all_captions, all_labels
+
+
+def get_captioned_imagenet(split='val'):
+    dataset = CaptionedImageNet(path='data/captioned_imagenet', split=split, preprocess=None)
+    all_labels = np.array(dataset.labels)
+    all_captions = dataset.captions
+
+    return all_captions, all_labels
+
+
+def save_tsne(features, labels, file_name):
+    tsne = TSNE(verbose=True, n_jobs=64, n_iter=500).fit(features)
+    plt.figure(figsize=(25,25))
+    plt.rc('font', size=30) 
+    plt.xticks([])
+    plt.yticks([])
+    plt.title(file_name)
+    plt.scatter(tsne[:,0], tsne[:,1], s=1.5, c=labels, cmap='hsv', alpha=0.8)
+    plt.savefig(file_name, bbox_inches='tight')
+
 
 class WrappedHuggingfaceTransformer(nn.Module):
     def __init__(self, huggingface_transformer) -> None:
@@ -131,7 +124,8 @@ class WrappedHuggingfaceTransformer(nn.Module):
         text_features = mean_pooling(text_features, encoded_input['attention_mask'])
 
         return text_features
-        
+
+
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0] #First element of model_output contains all token embeddings
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
@@ -139,17 +133,8 @@ def mean_pooling(model_output, attention_mask):
 
 
 if __name__=='__main__':
-
-    args = parse_args()
-    args.nlp_eval_frequency = 1
-    args.distributed = False
-    args.eval_data_dir='/data/Datasets'
-    args.fast_evaluation=False
-    args.linear_prob_mode='pytorch'
-    args.batch_size=2048
-    num_workers=8
-    model_name = args.text_model
-
+    
+    
     huggingface_transformers = [
         'roberta-large',
         'roberta-large-mnli',
@@ -173,17 +158,31 @@ if __name__=='__main__':
 
 
 for model_name in sentence_transformers + huggingface_transformers:
-
     if model_name in huggingface_transformers:
         model = WrappedHuggingfaceTransformer(model_name).cuda()
     elif model_name in sentence_transformers:
         model = SentenceTransformer(model_name).cuda()
-    else:
-        raise 'wtf?'
+    print('= '*64)
+    print(model_name)
+
+    for dataset in ['coco_train']:
+        if dataset=='captioned_imagenet_val':
+            captions, labels = get_captioned_imagenet(split='val')
+        if dataset=='captioned_imagenet_train':
+            captions, labels = get_captioned_imagenet(split='train')
+        elif dataset=='coco_val':
+            captions, labels = get_coco(split='val')
+        elif dataset=='coco_train':
+            captions, labels = get_coco(split='train')
+        elif dataset=='imagenet_captions':
+            captions, labels = get_imagenet_captions()
+
+        features = model.encode(captions, convert_to_tensor=True, show_progress_bar=True, batch_size=1024)
+        features = torch.nn.functional.normalize(features, dim=-1).cpu().numpy()
+                
+        #save_tsne(features, labels, dataset + '-' + model_name + '.png')
         
-    features, labels = get_feature_and_label(model)
-    TransRate = TransRate_estimator(features, labels)
-    print(model_name, TransRate)
+        print(dataset, 'TransRate', transrate(features, labels, eps=1e-4))
+        print(dataset, 'logme', log_maximum_evidence(features, labels))
+        print(dataset, 'h_score', h_score(features, labels))
 
-
-    
