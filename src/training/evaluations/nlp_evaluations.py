@@ -244,8 +244,9 @@ def nlp_eval(model, epoch, args):
     results['sts-benchmark'] = sts_result
 
     if not args.fast_evaluation:
-        captioned_imagenet = imagenet_linear(model, args)
-        results['captioned_imagenet'] = captioned_imagenet
+        pass
+        # captioned_imagenet = imagenet_linear(model, args)
+        # results['captioned_imagenet'] = captioned_imagenet
         
         # rg65, simlex999, wordsim353 = word_evaluations(model, args)
         # results['rg65'] = rg65

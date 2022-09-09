@@ -205,7 +205,7 @@ def get_csv_dataset(args, preprocess_fn, aug, is_train, index_mapping):
         sep=args.csv_separator,
         dataset_size=args.dataset_size,
         index_mapping=index_mapping,
-        skip_image=args.cache_teacher is not None
+        #skip_image=args.cache_teacher is not None
         )
     num_samples = len(dataset)
     sampler = DistributedSampler(dataset) if args.distributed and is_train else None

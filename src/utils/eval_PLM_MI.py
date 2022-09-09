@@ -14,6 +14,7 @@ from sentence_transformers import SentenceTransformer
 from mutual_information.transrate import transrate
 from mutual_information.logme import log_maximum_evidence
 from mutual_information.hscore import h_score
+from mutual_information.mean_classifier import mean_classifier_acc
 
 from openTSNE import TSNE
 from utils.captioned_imagenet import CaptionedImageNet
@@ -50,6 +51,8 @@ def get_imagenet_captions():
     df = pd.read_csv('data/ImageNet_captions_labeled.csv', sep='\t',  lineterminator='\n')
     all_labels = np.array(df['label'].values.tolist())
     all_captions = df['caption'].values.tolist()
+    for i in range(len(all_captions)):
+        all_captions[i] = all_captions[i][:120]
 
     return all_captions, all_labels
 
@@ -157,7 +160,8 @@ if __name__=='__main__':
     ]
 
 
-for model_name in sentence_transformers + huggingface_transformers:
+#for model_name in sentence_transformers + :
+for model_name in ['deepset/xlm-roberta-large-squad2','joeddav/xlm-roberta-large-xnli'] + sentence_transformers:
     if model_name in huggingface_transformers:
         model = WrappedHuggingfaceTransformer(model_name).cuda()
     elif model_name in sentence_transformers:
@@ -165,7 +169,8 @@ for model_name in sentence_transformers + huggingface_transformers:
     print('= '*64)
     print(model_name)
 
-    for dataset in ['coco_train']:
+    #for dataset in ['captioned_imagenet_train', 'captioned_imagenet_val', 'coco_train', 'coco_val', 'imagenet_captions']:
+    for dataset in ['imagenet_captions']:#, 'imagenet_captions']:
         if dataset=='captioned_imagenet_val':
             captions, labels = get_captioned_imagenet(split='val')
         if dataset=='captioned_imagenet_train':
@@ -177,12 +182,14 @@ for model_name in sentence_transformers + huggingface_transformers:
         elif dataset=='imagenet_captions':
             captions, labels = get_imagenet_captions()
 
-        features = model.encode(captions, convert_to_tensor=True, show_progress_bar=True, batch_size=1024)
-        features = torch.nn.functional.normalize(features, dim=-1).cpu().numpy()
+        features = model.encode(captions, convert_to_tensor=True, show_progress_bar=True, batch_size=128)
+        features = torch.nn.functional.normalize(features, dim=-1)
+        features = features.cpu().numpy()
                 
         #save_tsne(features, labels, dataset + '-' + model_name + '.png')
         
-        print(dataset, 'TransRate', transrate(features, labels, eps=1e-4))
-        print(dataset, 'logme', log_maximum_evidence(features, labels))
-        print(dataset, 'h_score', h_score(features, labels))
+        # print(dataset, 'TransRate', transrate(features, labels, eps=1e-4))
+        # print(dataset, 'logme', log_maximum_evidence(features, labels))
+        # print(dataset, 'h_score', h_score(features, labels))
+        print(dataset, 'mean_classifier_acc', mean_classifier_acc(features, labels))
 
