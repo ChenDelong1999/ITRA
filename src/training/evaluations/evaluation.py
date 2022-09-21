@@ -26,6 +26,7 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
     else:
         args.fast_evaluation = False
         zeroshot_datasets= [
+            'ImageNet',
             'birdsnap', 
             'CIFAR10', 
             'CIFAR100', 
@@ -41,8 +42,7 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
             'RenderedSST2',
             'StanfordCars', 
             'STL10',
-            'ucf101',
-            'ImageNet', 
+            'ucf101', 
             #'Caltech101', 
             #'Flowers102', 
             #'SUN397', 

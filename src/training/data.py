@@ -26,6 +26,28 @@ except ImportError:
     pass
 
 
+from torchvision.datasets.coco import CocoCaptions
+import os
+
+class COCOCaptionsDataset(Dataset):
+    def __init__(self, transforms, args) -> None:
+        
+        coco_train_root = os.path.join(args.eval_data_dir, 'coco2017/train2017')
+        coco_train_json = os.path.join(args.eval_data_dir, 'coco2017/annotations/captions_train2017.json')
+        self.coco_dataset = CocoCaptions(root=coco_train_root, annFile=coco_train_json, transform=transforms)
+
+    def __len__(self):
+        return len(self.coco_dataset)
+
+    def __getitem__(self, index):
+
+        img, captions = self.coco_dataset[index]
+
+        return index, img, captions[0]
+
+    
+
+
 class CsvDataset(Dataset):
     def __init__(self, input_filename, transforms, img_key, caption_key, aug=None, sep="\t", dataset_size=None, index_mapping=None, skip_image=False):
         logging.debug(f'Loading csv data from {input_filename}.')
@@ -196,17 +218,20 @@ class DataInfo:
 def get_csv_dataset(args, preprocess_fn, aug, is_train, index_mapping):
     input_filename = args.train_data if is_train else args.val_data
     assert input_filename
-    dataset = CsvDataset(
-        input_filename,
-        preprocess_fn,
-        aug=aug if args.BYOL else None,
-        img_key=args.csv_img_key,
-        caption_key=args.csv_caption_key,
-        sep=args.csv_separator,
-        dataset_size=args.dataset_size,
-        index_mapping=index_mapping,
-        #skip_image=args.cache_teacher is not None
-        )
+    if input_filename=='coco':
+        dataset = COCOCaptionsDataset(transforms=preprocess_fn, args=args)
+    else:
+        dataset = CsvDataset(
+            input_filename,
+            preprocess_fn,
+            aug=aug if args.BYOL else None,
+            img_key=args.csv_img_key,
+            caption_key=args.csv_caption_key,
+            sep=args.csv_separator,
+            dataset_size=args.dataset_size,
+            index_mapping=index_mapping,
+            #skip_image=args.cache_teacher is not None
+            )
     num_samples = len(dataset)
     sampler = DistributedSampler(dataset) if args.distributed and is_train else None
     shuffle = is_train and sampler is None
@@ -219,7 +244,7 @@ def get_csv_dataset(args, preprocess_fn, aug, is_train, index_mapping):
         pin_memory=True,
         sampler=sampler,
         drop_last=False,
-        persistent_workers=True
+        persistent_workers=args.workers>0
     )
     dataloader.num_samples = num_samples
     dataloader.num_batches = len(dataloader)

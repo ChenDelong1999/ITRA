@@ -1,0 +1,2 @@
+STS12	STS13	STS14	STS15	STS16	STSBenchmark	SICKRelatedness	Avg.	model
+54.65	69.16	60.90	72.27	64.43	60.82	55.32	62.51	average_word_embeddings_glove.6B.300d

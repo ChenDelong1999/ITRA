@@ -1,0 +1,2 @@
+STS12	STS13	STS14	STS15	STS16	STSBenchmark	SICKRelatedness	Avg.	model
+71.92	81.15	77.67	84.44	81.38	84.12	78.08	79.82	sentence-transformers/paraphrase-MiniLM-L6-v2

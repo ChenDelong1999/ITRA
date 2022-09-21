@@ -312,6 +312,13 @@ def parse_args():
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Evaluation
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    
+    parser.add_argument(
+        "--eval-first",
+        default=False,
+        action="store_true",
+        help="evaluate before start training"
+    )
     parser.add_argument("--zeroshot-frequency", type=int, default=0, help="How often to run zero shot.")
     parser.add_argument("--retrieval-frequency", type=int, default=0, help="How often to run coco retrieval.")
     parser.add_argument("--linear-frequency", type=int, default=0, help="How often to run linear eval.")

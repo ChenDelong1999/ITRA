@@ -167,7 +167,7 @@ def train_one_epoch(
                     "loss-ssl": ssl_loss.item() if args.BYOL else 0,
                     "learning_rate": optimizer.param_groups[0]["lr"],
                     "gradient-norm": norm,
-                    "logit_scale": model.module.logit_scale.item()
+                    "logit_scale": model.module.logit_scale.item() if args.distributed else model.logit_scale.item()
                 }
                 profiling = {
                     "batch data time (s)": data_time_m.val,

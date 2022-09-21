@@ -8,26 +8,32 @@
 - Create a conda environment and install PyTorch:
 
     ```bash
-    conda create -n protoclip python=3.8
-    conda activate protoclip
+    conda create -n vlkd python=3.8
+    conda activate vlkd
     ```
 
     This repo requirs PyTorch (1.11.0) and torchvision. Please install them via https://pytorch.org/get-started/locally
 
-- Clone this repo:
+    ```
+    conda install pytorch==1.11.0 torchvision==0.12.0 torchaudio==0.11.0 cudatoolkit=10.2 -c pytorch -y
+    ```
+
+<!-- - Clone this repo:
 
     ```bash
     git clone https://github.com/megvii-research/protoclip
     cd protoclip
     export PYTHONPATH="$PYTHONPATH:$PWD/src"
     ```
-    **Note**: If import error is occured later, run `export PYTHONPATH="$PYTHONPATH:$PWD/src"` again.
+    **Note**: If import error is occured later, run `export PYTHONPATH="$PYTHONPATH:$PWD/src"` again. -->
 
 - Install additional dependencies:
     ```bash
-    conda install pandas scikit-learn faiss-gpu ftfy tqdm matplotlib pycocotools
-    conda install -c huggingface transformers # hugging face
-    conda install wandb # if you want to use wandb for better logging
+    conda install pillow pandas scikit-learn faiss-gpu ftfy tqdm matplotlib pycocotools 
+    conda install -c huggingface transformers 
+    conda install -c conda-forge sentence-transformers
+    conda install wandb
+    pip install adapter-transformers
     # TODO: remove nori dependency
     pip install nori2
     ```
@@ -85,6 +91,8 @@ python3 src/utils/gather_cc.py path/to/Train_GCC-training.tsv
            └── val2017 
     ```
 
+- *STS*
+https://github.com/princeton-nlp/SimCSE#evaluation
 
 ## 📈Monitoring Downstream Performances During Training
 

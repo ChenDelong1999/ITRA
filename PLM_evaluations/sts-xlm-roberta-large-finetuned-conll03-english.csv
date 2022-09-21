@@ -1,0 +1,2 @@
+STS12	STS13	STS14	STS15	STS16	STSBenchmark	SICKRelatedness	Avg.	model
+28.76	20.39	21.63	34.65	38.95	27.30	54.44	32.30	xlm-roberta-large-finetuned-conll03-english

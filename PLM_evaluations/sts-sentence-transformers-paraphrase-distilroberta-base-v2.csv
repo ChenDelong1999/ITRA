@@ -1,0 +1,2 @@
+STS12	STS13	STS14	STS15	STS16	STSBenchmark	SICKRelatedness	Avg.	model
+75.70	84.17	77.64	85.94	82.38	85.37	78.48	81.38	sentence-transformers/paraphrase-distilroberta-base-v2

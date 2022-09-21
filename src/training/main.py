@@ -170,11 +170,12 @@ def main():
         logging.info(f'Dataset initialized:')
         logging.info(f'\tdataset length: \t{len(data["train"].dataset)}')
         logging.info(f'\tdataloader length: \t{len(data["train"].dataloader)}')
-        logging.info(f'\tsampler length: \t{len(data["train"].sampler)}')
+        if data["train"].sampler is not None:
+            logging.info(f'\tsampler length: \t{len(data["train"].sampler)}')
 
 
     if args.train_data is not None and args.dataset_size is None:
-        args.dataset_size = len(data['train'].dataset.captions)
+        args.dataset_size = len(data['train'].dataset.captions) if args.train_data !='coco' else len(data['train'].dataset)
     if not args.episodic_training:
         args.episode_size = args.dataset_size
 
@@ -280,6 +281,9 @@ def main():
     if 'train' not in data:
         evaluate(model, start_epoch, preprocess_val, args, writer)
         return
+    
+    if args.eval_first:
+        evaluate(model, start_epoch, preprocess_val, args, writer)
     
     if is_master(args):
         logging.info("args:")

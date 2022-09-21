@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import textwrap
 
 
-def plot_pairs(imgs, texts,  suptitle, file_name='test.png', sample_per_row = 32):
+def plot_pairs(imgs, texts,  suptitle=None, file_name='test.png', sample_per_row = 32):
         # imgs: a list of PIL-opened images
         # texts: a list of str, will be showed as title (per subplot)
         # suptitle: figure super title
@@ -17,13 +17,13 @@ def plot_pairs(imgs, texts,  suptitle, file_name='test.png', sample_per_row = 32
     
     plt.figure(figsize=(2*column,2.5*row))
     plt.subplots_adjust(wspace=0.3, hspace=0.3)
-    plt.rc('font', size=10) 
+    plt.rc('font', size=5) 
 
     for i in range(len(imgs)):
         image=imgs[i]
         text=texts[i].replace('$','')
-        if len(text)>40:
-            text = text[:40]+'...'
+        if len(text)>80:
+            text = text[:80]+'...'
         text = textwrap.fill(text, width=20)
         
         plt.subplot(row,column, i+1)

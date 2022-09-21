@@ -62,7 +62,7 @@ if __name__ == '__main__':
 
     args.nlp_eval_frequency = 1
     args.zeroshot_frequency = 1
-    args.linear_frequency = 1
+    args.linear_frequency = 0
     #args.linear_prob_mode= 'pytorch-search'
     args.retrieval_frequency = 1
     args.save_logs = False

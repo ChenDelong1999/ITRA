@@ -1,0 +1,2 @@
+STS12	STS13	STS14	STS15	STS16	STSBenchmark	SICKRelatedness	Avg.	model
+30.87	59.89	47.73	60.29	63.73	47.29	58.22	52.57	bert-base-uncased

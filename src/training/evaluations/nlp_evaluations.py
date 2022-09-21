@@ -22,7 +22,11 @@ import os
 import tarfile
 from scipy.stats import pearsonr, spearmanr
 from utils.captioned_imagenet import CaptionedImageNet
+# from senteval import engine
 
+PATH_TO_SENTEVAL = '/data/codes/SimCSE/SentEval'
+sys.path.insert(0, PATH_TO_SENTEVAL)
+import senteval
 
 autocast = torch.cuda.amp.autocast
 
@@ -131,14 +135,53 @@ def sts_benchmark(model, args):
                 train_samples.append(inp_example)
 
     # evaluator = EmbeddingSimilarityEvaluator.from_input_examples(dev_samples, name='sts-dev')
-    # model.evaluate(evaluator)
-
     evaluator = EmbeddingSimilarityEvaluator.from_input_examples(test_samples, name='sts-test')
     #result = model_without_ddp.evaluate(evaluator)
     result = evaluator(model)
     logging.info(f'Finished sts-b evaluation, score: {result}')
     return result
 
+
+def sts12_sts16_eval(model, args):
+    PATH_TO_DATA = os.path.join(args.eval_data_dir,'simcse_sts_data')
+    # Set params for SentEval
+    params = {'task_path': PATH_TO_DATA, 'usepytorch': True, 'kfold': 10}
+    params['classifier'] = {'nhid': 0, 'optim': 'adam', 'batch_size': 64,
+                            'tenacity': 5, 'epoch_size': 4}
+
+    # SentEval prepare and batcher
+    def prepare(params, samples):
+        return
+
+    def batcher(params, batch):
+        batch = [' '.join(sent) if sent != [] else '.' for sent in batch]
+        embeddings = model.encode(batch, show_progress_bar=False)
+        return embeddings
+
+    # Set up the tasks
+    tasks = ['STS12', 'STS13', 'STS14', 'STS15', 'STS16', 'STSBenchmark', 'SICKRelatedness']
+    logging.info(f'Starting SemEval on {tasks}')
+    results = {}
+    for task in tqdm(tasks):
+        se = senteval.engine.SE(params, batcher, prepare)
+        result = se.eval(task)
+        results[task] = result
+
+    # Get evaluation results
+    task_names = []
+    scores = []
+    for task in tasks:
+        task_names.append(task)
+        if task in results:
+            if task in ['STS12', 'STS13', 'STS14', 'STS15', 'STS16']:
+                scores.append("%.2f" % (results[task]['all']['spearman']['all'] * 100))
+            else:
+                scores.append("%.2f" % (results[task]['test']['spearman'].correlation * 100))
+        else:
+            scores.append("0.00")
+    task_names.append("Avg.")
+    scores.append("%.2f" % (sum([float(score) for score in scores]) / len(scores)))
+    return task_names, scores
 
 def sts_coco(model, args):
     samples = []
@@ -243,8 +286,16 @@ def nlp_eval(model, epoch, args):
     sts_result = sts_benchmark(model, args)
     results['sts-benchmark'] = sts_result
 
+
     if not args.fast_evaluation:
         pass
+    
+        sts12_sts16_task_names, scores = sts12_sts16_eval(model, args)
+        length = len(sts12_sts16_task_names)
+        for i in range(length):
+            results[sts12_sts16_task_names[i]] = scores[i]
+            logging.info(f'\t{sts12_sts16_task_names[i]}\t{scores[i]}')
+            
         # captioned_imagenet = imagenet_linear(model, args)
         # results['captioned_imagenet'] = captioned_imagenet
         
@@ -253,8 +304,8 @@ def nlp_eval(model, epoch, args):
         # results['wordsim353'] = wordsim353
         # results['simlex999'] = simlex999
         
-        # sts_result = sts_coco(model, args)
-        # results['sts-coco'] = sts_result
+        # # sts_result = sts_coco(model, args)
+        # # results['sts-coco'] = sts_result
         
         # wiki_section_result = wiki_sections(model, args)
         # results['wiki-sections'] = wiki_section_result   

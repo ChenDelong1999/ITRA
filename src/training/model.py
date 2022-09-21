@@ -12,12 +12,12 @@ from training.distributed import is_master
 from training.projection import DINOHead
 from training.prompt import Prompt
 
-# from transformers.adapters import PrefixTuningConfig
-# from transformers.adapters import AdapterConfig
-# from transformers.adapters import PfeifferInvConfig
-# #from transformers.adapters import LoRAConfig
-# from transformers.adapters import CompacterConfig            
-# from transformers.adapters import MAMConfig
+from transformers.adapters import PrefixTuningConfig
+from transformers.adapters import AdapterConfig
+from transformers.adapters import PfeifferInvConfig
+#from transformers.adapters import LoRAConfig
+from transformers.adapters import CompacterConfig            
+from transformers.adapters import MAMConfig
 
 from distiller import NEED_LOGIT_SCALE, NEED_PROTOTYPE_LAYER
 
@@ -128,6 +128,10 @@ def get_model(args):
         if 'mobilenet' in args.image_model:
             image_backbone.output_dim = image_backbone.classifier[0].weight.shape[1]
             image_backbone.classifier=torch.nn.Identity()
+        if 'vit' in args.image_model:
+            image_backbone.output_dim = image_backbone.hidden_dim
+            image_backbone.heads=torch.nn.Identity()
+            image_backbone.head=torch.nn.Identity()
         image_backbone.to(device=args.device)
         
     for param in image_backbone.parameters():
@@ -157,6 +161,7 @@ class WrappedModel(nn.Module):
     def __init__(self, text_backbone, image_backbone, tokenizer, args, prompt=None) -> None:
         super().__init__()
         self.device = args.device
+        self.text_model = args.text_model
         
         # text backbone
         self.text_backbone = text_backbone
@@ -220,7 +225,11 @@ class WrappedModel(nn.Module):
             args.joint_projection_dim = self.image_dim
 
         if args.distiller in NEED_LOGIT_SCALE:
-            self.logit_scale = self.text_backbone.logit_scale if hasattr(self.text_backbone, 'logit_scale') else torch.autograd.Variable(torch.ones(1) * np.log(1 / 0.07)).to(self.device)
+            if hasattr(self.text_backbone, 'logit_scale'):
+                self.logit_scale = self.text_backbone.logit_scale 
+                self.text_backbone.logit_scale = None
+            else:
+                self.logit_scale = torch.autograd.Variable(torch.ones(1) * np.log(1 / 0.07)).to(self.device)
             self.logit_scale = nn.Parameter(self.logit_scale)
             self.logit_scale.requires_grad = True
         else:
@@ -303,7 +312,11 @@ class WrappedModel(nn.Module):
                     'attention_mask': encoded_input['attention_mask'].to(self.device)
                     }
                 text_features = self.text_backbone(**encoded_input)
-                text_features = mean_pooling(text_features, encoded_input['attention_mask'])
+                
+                if self.text_model == 'facebook/contriever-msmarco':    
+                    text_features = mean_pooling_contriever(text_features[0], encoded_input['attention_mask'])
+                else:
+                    text_features = mean_pooling(text_features, encoded_input['attention_mask'])
 
         if projection:
             text_features = self.text_projection_head(text_features)
@@ -329,3 +342,8 @@ def mean_pooling(model_output, attention_mask):
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
+
+def mean_pooling_contriever(token_embeddings, mask):
+    token_embeddings = token_embeddings.masked_fill(~mask[..., None].bool(), 0.)
+    sentence_embeddings = token_embeddings.sum(dim=1) / mask.sum(dim=1)[..., None]
+    return sentence_embeddings

@@ -33,7 +33,7 @@ def main():
             f'Process (global: {args.rank}, local {args.local_rank}), total {args.world_size}.'
             )
     
-    model = torchvision.models.resnet50(pretrained=True)
+    model = torchvision.models.resnet18(pretrained=args.pretrained_image_model)
     model.to(args.device)
     model.eval()
     model.fc = nn.Identity()
@@ -50,6 +50,7 @@ def main():
     
     if is_master(args):
         logging.info(model)
+        logging.info(f'pretrained={args.pretrained_image_model}')
         logging.info(preprocess)
     
     data = get_data(args, (preprocess, preprocess, preprocess), index_mapping=None)
@@ -58,7 +59,7 @@ def main():
         logging.info(f'\tdataset length: \t{len(data["train"].dataset)}')
         logging.info(f'\tdataloader length: \t{len(data["train"].dataloader)}')
         logging.info(f'\tsampler length: \t{len(data["train"].sampler)}')
-        dataset_features = np.zeros([len(data["train"].dataset), 2048])
+        dataset_features = np.zeros([len(data["train"].dataset), 512])
 
     for i, batch in enumerate(data['train'].dataloader):
         index, images, texts = batch
@@ -98,8 +99,7 @@ export PYTHONPATH="src"
 eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 ulimit -n 65536
 torchrun --nproc_per_node 8 -m utils.feature_extraction_parallel \
-    --train-data 'cache/yfcc_nori.csv' --batch-size 1024 --cache-teacher 'cache/resnet50-yfcc14m.npy'
-
+    --train-data 'cache/yfcc_nori.csv' --dataset-size 14000000 --batch-size 512 --cache-teacher 'cache/resnet18-random-yfcc14m.npy' --pretrained-image-model
 '''
 
 if __name__ == "__main__":

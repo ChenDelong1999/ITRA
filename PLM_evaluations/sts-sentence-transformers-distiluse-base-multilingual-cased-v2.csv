@@ -1,0 +1,2 @@
+STS12	STS13	STS14	STS15	STS16	STSBenchmark	SICKRelatedness	Avg.	model
+69.67	72.06	69.47	79.60	76.75	78.07	73.34	74.14	sentence-transformers/distiluse-base-multilingual-cased-v2

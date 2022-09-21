@@ -1,0 +1,2 @@
+STS12	STS13	STS14	STS15	STS16	STSBenchmark	SICKRelatedness	Avg.	model
+72.91	84.58	76.90	85.92	78.44	83.47	81.42	80.52	sentence-transformers/all-roberta-large-v1

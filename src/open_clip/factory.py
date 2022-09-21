@@ -135,7 +135,7 @@ def create_model_and_transforms(
         model_name, pretrained, precision, device, jit,
         force_quick_gelu=force_quick_gelu,
         args=args)
-    preprocess_train = image_transform(model.visual.image_size, is_train=True, augmentation=args.augmentation)
+    preprocess_train = image_transform(model.visual.image_size, is_train=True, augmentation=args.augmentation if args is not None else None)
     preprocess_val = image_transform(model.visual.image_size, is_train=False)
     return model, preprocess_train, preprocess_val
 
