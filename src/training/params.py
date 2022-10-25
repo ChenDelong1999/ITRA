@@ -32,6 +32,12 @@ def parse_args():
         type=str,
         )
 
+    parser.add_argument("--w-simcse", type=float, default=0.0, help="simcse dropout-based contrastive")
+    parser.add_argument("--w-distill", type=float, default=1.0, help="")
+
+    
+    parser.add_argument("--logit-scale", type=float, default=0.07, help="temperature")
+
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Knowledge Distillation Model
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -46,6 +52,12 @@ def parse_args():
         default='OpenCLIP',
         help="how to build the text model",
     ) 
+    
+    parser.add_argument(
+        "--text-pooler",
+        type=str,
+        default='mean',
+    )
     parser.add_argument(
         "--pretrained-text-model", action="store_true", default=False,
         help="pretrained text?",
@@ -61,6 +73,9 @@ def parse_args():
     parser.add_argument(
         "--text-head-n-layers", type=int, default=3,
         help="how many MLP layers for text projection head",
+    )
+    parser.add_argument(
+        "--max-seq-length", type=int, default=77
     )
     # === image model === #
     parser.add_argument(

@@ -24,7 +24,7 @@ from scipy.stats import pearsonr, spearmanr
 from utils.captioned_imagenet import CaptionedImageNet
 # from senteval import engine
 
-PATH_TO_SENTEVAL = '/data/codes/SimCSE/SentEval'
+PATH_TO_SENTEVAL = 'src/training/evaluations/SentEval'
 sys.path.insert(0, PATH_TO_SENTEVAL)
 import senteval
 
@@ -134,12 +134,12 @@ def sts_benchmark(model, args):
             else:
                 train_samples.append(inp_example)
 
-    # evaluator = EmbeddingSimilarityEvaluator.from_input_examples(dev_samples, name='sts-dev')
+    evaluator = EmbeddingSimilarityEvaluator.from_input_examples(dev_samples, name='sts-dev')
+    result_dev = evaluator(model)
     evaluator = EmbeddingSimilarityEvaluator.from_input_examples(test_samples, name='sts-test')
-    #result = model_without_ddp.evaluate(evaluator)
-    result = evaluator(model)
-    logging.info(f'Finished sts-b evaluation, score: {result}')
-    return result
+    result_test = evaluator(model)
+    logging.info(f'Finished sts-b evaluation, score: {result_dev} (dev), {result_test} (test).')
+    return result_dev, result_test
 
 
 def sts12_sts16_eval(model, args):
@@ -283,8 +283,9 @@ def nlp_eval(model, epoch, args):
         return {}
 
     results = {}
-    sts_result = sts_benchmark(model, args)
-    results['sts-benchmark'] = sts_result
+    result_dev, result_test = sts_benchmark(model, args)
+    results['sts-b-dev'] = result_dev
+    results['sts-b-test'] = result_test
 
 
     if not args.fast_evaluation:

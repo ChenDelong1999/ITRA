@@ -1,59 +1,51 @@
+# Full fine-tuning SimCSE Re-impl
 
-# Stage 2, Full fine-tuning (standard KD) with V100
 conda activate vlkd
 cd /data/codes/ProtoRKD
 export PYTHONPATH="src"
 eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 ulimit -n 65536
 torchrun --nproc_per_node 8 -m training.main \
-    --dataset-size 2500000 --episode-size 500000 --train-data 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv' \
-    --epochs 10 --save-frequency 10 --batch-size 128 --workers 8 \
-    --linear-frequency 0  --zeroshot-frequency 0 --retrieval-frequency 0  --nlp-eval-frequency 1  --eval-data-dir '/data/Datasets' --eval-first\
-    --lr 1e-4 --warmup 100 --wd 0.5 --max-grad-norm 1 \
-    --image-model 'ViT-B-16' --image-model-builder 'OpenCLIP' --pretrained-image-model --image-head-n-layers 1 \
-    --text-model-builder 'huggingface-transformer' --pretrained-text-model --text-head-n-layers 0 --unlock-text-model --text-model 'bert-base-uncased'  \
-    --distiller 'InfoNCE' --find-unused-parameters \
-    --report-to tensorboard --logs 'logs/V2L-KD' --copy-codebase --copy-codebase --name 'L[CLIP-ViT-B-16-h1]_[InfoNCE]_U[bert-base-uncased]-bs1024-10epX50w-CC'
-
-# Stage 2, adaptive-tuning, V100, YFCC
-conda activate vlkd
-cd /data/codes/ProtoRKD
-export PYTHONPATH="src"
-eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
-ulimit -n 65536
-torchrun --nproc_per_node 8 -m training.main \
-    --dataset-size 14000000 --episode-size 500000 --train-data 'cache/yfcc_nori.csv' \
-    --epochs 1000 --save-frequency 1000 --batch-size 256 --workers 8 \
+    --dataset-size 1000000 --episode-size 100000 --train-data 'cache/simcse_wiki1m.csv' \
+    --epochs 10 --save-frequency 10 --batch-size 64 --workers 8 \
     --linear-frequency 0  --zeroshot-frequency 0 --retrieval-frequency 0  --nlp-eval-frequency 1  --eval-data-dir '/data/Datasets' --eval-first \
-    --lr 5e-5 --warmup 2000 --wd 0.5 --max-grad-norm 1 \
-    --image-model 'ViT-B-16' --image-model-builder 'OpenCLIP' --pretrained-image-model --image-head-n-layers 1 \
-    --text-model-builder 'huggingface-transformer' --pretrained-text-model --text-head-n-layers 0 --text-model 'bert-base-uncased'  \
-    --distiller 'InfoNCE'  --adapter 'bottleneck_adapter' \
-    --report-to tensorboard --logs 'logs/V2L-KD' --copy-codebase --name 'YFCC-L[CLIP-ViT-B-16-h1]_[InfoNCE]_L[bert-base-uncased]-bs2048-1000epX50w-bottleneck_adapter'
+    --lr 1e-5 --warmup 0 --wd 0 --eps 1e-6 --max-grad-norm 1 \
+    --image-model 'ViT-B-16' --image-model-builder 'OpenCLIP' --pretrained-image-model --image-head-n-layers 0 \
+    --text-model-builder 'huggingface-transformer' --pretrained-text-model --text-head-n-layers 0 --unlock-text-model  --text-model 'roberta-base' \
+    --text-pooler 'cls' --max-seq-length 32 --logit-scale 0.05 \
+    --distiller 'InfoNCE' --w-simcse 1 --w-distill 0  \
+    --report-to tensorboard --logs 'logs/V2L-KD-1025-SimCSE-reimp' --copy-codebase --copy-codebase --name 'SimCSE(1)_[roberta-base-cls]-bs512-wiki1m'
 
-# Stage 2, adaptive-tuning
+
+# Full SimCSE + KD
 conda activate vlkd
 cd /data/codes/ProtoRKD
 export PYTHONPATH="src"
 eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 ulimit -n 65536
 torchrun --nproc_per_node 8 -m training.main \
-    --dataset-size 2500000 --episode-size 500000 --train-data 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv' \
-    --epochs 300 --save-frequency 100 --batch-size 128 --workers 8 \
+    --dataset-size 14000000 --episode-size 100000 --train-data 'cache/yfcc_nori.csv' \
+    --epochs 250 --save-frequency 250 --batch-size 64 --workers 8 \
     --linear-frequency 0  --zeroshot-frequency 0 --retrieval-frequency 0  --nlp-eval-frequency 1  --eval-data-dir '/data/Datasets' --eval-first \
-    --lr 1e-4 --warmup 100 --wd 0.5 --max-grad-norm 1 \
-    --image-model 'ViT-B-16' --image-model-builder 'OpenCLIP' --pretrained-image-model --image-head-n-layers 1 \
-    --text-model-builder 'huggingface-transformer' --pretrained-text-model --text-head-n-layers 0 --text-model 'bert-base-uncased'  \
-    --distiller 'InfoNCE' --adapter 'dummy' \
-    --report-to tensorboard --logs 'logs/V2L-KD-0920' --copy-codebase --name 'L[CLIP-ViT-B-16-h1]_[InfoNCE]_L[bert-base-uncased]-bs1024-300epX50w-CC-dummy'
+    --lr 1e-5 --warmup 100 --wd 0 --eps 1e-6 --max-grad-norm 1 \
+    --image-model 'ViT-B-16' --image-model-builder 'OpenCLIP' --pretrained-image-model --image-head-n-layers 0 \
+    --text-model-builder 'huggingface-transformer' --pretrained-text-model --text-head-n-layers 0 --unlock-text-model  --text-model 'roberta-base' \
+    --text-pooler 'cls' --max-seq-length 32 --logit-scale 0.05 \
+    --distiller 'InfoNCE' --w-simcse 1 --w-distill 0.1  \
+    --report-to tensorboard --logs 'logs/V2L-KD-1024' --copy-codebase --copy-codebase --name 'CLIP_ViT16_KD(0.1)+SimCSE(1)_U[roberta-base-cls]-bs512-YFCC-10ep'
+
+
+--adapter 'lang_adapter' 
+--unlock-text-model 
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
  
 
 # datasets
-    --dataset-size 14000000 --episode-size 500000 --train-data 'cache/yfcc_nori.csv' \
-    --dataset-size 2500000 --episode-size 500000 --train-data 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv' \
+    --dataset-size 1000000 --episode-size 100000 --train-data 'cache/simcse_wiki1m.csv' \
+    --dataset-size 14000000 --episode-size 100000 --train-data 'cache/yfcc_nori.csv' \
+    --dataset-size 2500000 --episode-size 100000 --train-data 's3://chendelonghahab/datasets/ConceptualCaption3M/nori_CC2716261.csv' \
     # nori speedup 's3://chendelonghahab/datasets/ConceptualCaption3M/CC2.6M-CC2M.nori' --on --replica=2
     # nori speedup 's3://chendelong/datasets/ConceptualCaption3M/CC_3M.nori' --on --replica=2
 

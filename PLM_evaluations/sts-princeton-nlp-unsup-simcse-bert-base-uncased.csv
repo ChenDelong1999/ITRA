@@ -1,0 +1,2 @@
+sts-b-dev	sts-b-test	STS12	STS13	STS14	STS15	STS16	STSBenchmark	SICKRelatedness	Avg.	model
+0.8172360419045698	0.7660517125828392	66.05	81.49	73.61	79.72	78.12	76.52	71.86	75.34	princeton-nlp/unsup-simcse-bert-base-uncased

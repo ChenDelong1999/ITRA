@@ -145,8 +145,17 @@ cd /data/codes/ProtoRKD
 export PYTHONPATH="src"
 eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 ulimit -n 65536
-python src/utils/eval_PLM.py --text-model 'princeton-nlp/sup-simcse-roberta-large'
+python src/utils/eval_PLM.py --text-model 'princeton-nlp/sup-simcse-bert-base-uncased'
 """
+# Model	Avg. STS
+# princeton-nlp/unsup-simcse-bert-base-uncased	76.25
+# princeton-nlp/unsup-simcse-bert-large-uncased	78.41
+# princeton-nlp/unsup-simcse-roberta-base	76.57
+# # princeton-nlp/unsup-simcse-roberta-large	78.90
+# princeton-nlp/sup-simcse-bert-base-uncased	81.57
+# princeton-nlp/sup-simcse-bert-large-uncased	82.21
+# princeton-nlp/sup-simcse-roberta-base	82.52
+# # princeton-nlp/sup-simcse-roberta-large	83.76
 
 if __name__=='__main__':
 
@@ -212,7 +221,7 @@ if __name__=='__main__':
     elif model_name in open_clip_transformers:
         model = WrappedOpenCLIPTransformer(model_name).cuda()
     else:
-        raise 'wtf?'
+        model = WrappedHuggingfaceTransformer(model_name).cuda() # FIXME
 
 
     results = nlp_eval(model, epoch=0, args=args)

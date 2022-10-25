@@ -19,6 +19,8 @@ from utils.training_utils import AverageMeter, Cacher
 from .distributed import is_master, gather_features, get_gathered_item
 from distiller import NEED_LOGIT_SCALE, NEED_GATHER, NEED_PROTOTYPE_LAYER
 
+from distiller import CLIPLoss
+
 def train_one_epoch(
     model, 
     data, 
@@ -35,6 +37,17 @@ def train_one_epoch(
     forward_context = torch.no_grad if args.cache_teacher is not None else suppress
 
     model.train()  
+    model_without_ddp = model.module if args.distributed else model
+    
+    if not args.unlock_text_model and args.adapter is None:
+        model_without_ddp.text_backbone.eval()
+        if is_master(args):
+            logging.info('set text backbone to .eval() mode')
+    if not args.unlock_image_model:
+        model_without_ddp.image_backbone.eval()
+        if is_master(args):
+            logging.info('set image backbone to .eval() mode')
+
     dataloader, sampler = data['train'].dataloader, data['train'].sampler
     if args.distributed and sampler is not None:
         sampler.set_epoch(epoch)
@@ -44,11 +57,12 @@ def train_one_epoch(
     data_time_m = AverageMeter()
     end = time.time()
     
-    model_without_ddp = model.module if args.distributed else model
     if args.cache_teacher is not None and is_master(args):
         cacher = Cacher(n_sample=args.episode_size, n_dim=model_without_ddp.text_dim, cache_file=args.cache_teacher)
         logging.info(f'Preparing to cache teacher features, size={cacher.feature.size()}, to be saved to {args.cache_teacher}')
 
+    if args.w_simcse > 0:
+        simcse_contrastive_loss = CLIPLoss(args, dim=0)
 
     for i, batch in enumerate(dataloader):
         step = num_batches_per_epoch * epoch + i
@@ -77,7 +91,11 @@ def train_one_epoch(
                     w = model_without_ddp.image_projection_head.last_layer.weight_v.data.clone()
                     model_without_ddp.text_projection_head.last_layer.weight_v.data.copy_(w)
 
-                image_features, text_features, logit_scale = model(images, texts, text_only=args.cache_teacher is not None)
+                image_features, text_features, logit_scale = model(images, texts, text_only=(args.cache_teacher is not None) or args.w_distill==0)
+
+                if args.w_simcse > 0:
+                    text_features_2 = model_without_ddp.encode_text(texts, projection=True)
+                    
                 # gather features
                 if args.distributed and args.distiller in NEED_GATHER:
                     all_image_features, all_text_features = gather_features(
@@ -85,13 +103,19 @@ def train_one_epoch(
                         args.local_loss, args.gather_with_grad, 
                         args.rank, args.world_size, args.horovod
                         )
+                    if args.w_simcse > 0:
+                        all_text_features_2 = get_gathered_item(text_features_2, args)
                 else:
                     all_image_features = image_features
                     all_text_features = text_features
+                    if args.w_simcse > 0:
+                        all_text_features_2 = text_features_2
 
                 if args.BYOL:
                     image_features_aug = model_without_ddp.encode_image(images_aug, projection=True)
                     ssl_loss = MSE(image_features_aug, image_features.detach())
+                elif args.w_simcse > 0:
+                    ssl_loss = args.w_simcse * simcse_contrastive_loss(all_text_features, all_text_features_2, logit_scale=logit_scale)
                 else:
                     ssl_loss = 0
                 
@@ -99,7 +123,7 @@ def train_one_epoch(
                     distill_loss = distiller(all_text_features, all_image_features, logit_scale=logit_scale)
                 else:
                     distill_loss = distiller(all_text_features, all_image_features)            
-                total_loss = distill_loss + ssl_loss
+                total_loss = args.w_distill * distill_loss + ssl_loss
         
         if args.cache_teacher is not None:
             # # # # # # # # # # # # # # # # # # 
@@ -164,7 +188,7 @@ def train_one_epoch(
                 # Save train loss / etc. Using non avg meter values as loggers have their own smoothing
                 log_data = {
                     "loss-distill": distill_loss.item(),
-                    "loss-ssl": ssl_loss.item() if args.BYOL else 0,
+                    "loss-ssl": ssl_loss.item() if args.BYOL or args.w_simcse > 0 else 0,
                     "learning_rate": optimizer.param_groups[0]["lr"],
                     "gradient-norm": norm,
                     "logit_scale": model.module.logit_scale.item() if args.distributed else model.logit_scale.item()

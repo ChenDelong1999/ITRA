@@ -46,9 +46,9 @@ torchrun --nproc_per_node 8 -m training.main \
     --linear-frequency 1  --zeroshot-frequency 1 --retrieval-frequency 1  --nlp-eval-frequency 1  --eval-data-dir '/data/Datasets' \
     --lr 1e-4 --warmup 2000 --wd 0.5 --max-grad-norm 5 \
     --image-model 'RN50' --image-model-builder 'OpenCLIP' --unlock-image-model --image-head-n-layers 2 \
-    --text-model-builder 'huggingface-transformer' --pretrained-text-model --text-head-n-layers 0 --text-model 'facebook/contriever' \
+    --text-model 'ViT-L-14' --text-model-builder 'OpenCLIP' --pretrained-text-model --text-head-n-layers 0 \
     --distiller 'InfoNCE' \
-    --report-to tensorboard --logs 'logs/Stage1-teacher-ablation' --copy-codebase --name 'U[RN50-h2]-L[facebook-contriever]-bs800-8ep'
+    --report-to tensorboard --logs 'logs/Stage1-teacher-ablation' --copy-codebase --name 'U[RN50-h2]-L[CLIP-ViT-L-14]-bs800-8ep'
     
 # Teacher Zoo
     --text-model 'RN50' --text-model-builder 'OpenCLIP' --pretrained-text-model --text-head-n-layers 0 \CLIP-pretrained
@@ -77,6 +77,7 @@ torchrun --nproc_per_node 8 -m training.main \
         --text-model 'all-mpnet-base-v2' \
         --text-model 'average_word_embeddings_komninos' \
         --text-model 'average_word_embeddings_glove.6B.300d' \
+
 
 
 # distiller ablation  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 

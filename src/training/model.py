@@ -55,8 +55,8 @@ def get_model(args):
         config = AutoConfig.from_pretrained(args.text_model)
         tokenizer = AutoTokenizer.from_pretrained(args.text_model)
         text_backbone = AutoModel.from_pretrained(args.text_model)
-        if tokenizer.pad_token is None:
-            tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+        # if tokenizer.pad_token is None:
+        #     tokenizer.add_special_tokens({'pad_token': '[PAD]'})
         args.text_dim = config.hidden_size
         args.text_width = None
 
@@ -165,12 +165,16 @@ class WrappedModel(nn.Module):
         
         # text backbone
         self.text_backbone = text_backbone
+        self.text_pooler = args.text_pooler
         self.text_dim = args.text_dim
         self.text_width = args.text_dim
         self.tokenizer = tokenizer        
         self.text_model_builder = args.text_model_builder
+        self.max_seq_length = args.max_seq_length
+            
         self.image_context = suppress if args.unlock_image_model else torch.no_grad
         self.text_context = suppress if (args.unlock_text_model or args.prompt or args.adapter is not None) else torch.no_grad
+        
         if is_master(args):
             logging.info(f'image_context: {str(self.image_context)}')
             logging.info(f'text_context: {str(self.text_context)}')
@@ -188,8 +192,8 @@ class WrappedModel(nn.Module):
         self.image_backbone = image_backbone
         self.image_dim = image_backbone.output_dim
 
-        if self.text_dim!=self.image_dim and args.text_head_n_layers+args.image_head_n_layers==0:
-            raise AssertionError(f'text and backbone feature dimension do not match ({self.text_dim} vs {self.image_dim}), projection head nlayer > 0 is needed!')
+        # if self.text_dim!=self.image_dim and args.text_head_n_layers+args.image_head_n_layers==0:
+        #     raise AssertionError(f'text and backbone feature dimension do not match ({self.text_dim} vs {self.image_dim}), projection head nlayer > 0 is needed!')
 
         # text projection head
         if args.text_head_n_layers > 0 or args.distiller in NEED_PROTOTYPE_LAYER:
@@ -229,7 +233,7 @@ class WrappedModel(nn.Module):
                 self.logit_scale = self.text_backbone.logit_scale 
                 self.text_backbone.logit_scale = None
             else:
-                self.logit_scale = torch.autograd.Variable(torch.ones(1) * np.log(1 / 0.07)).to(self.device)
+                self.logit_scale = torch.autograd.Variable(torch.ones(1) * np.log(1 / args.logit_scale)).to(self.device)
             self.logit_scale = nn.Parameter(self.logit_scale)
             self.logit_scale.requires_grad = True
         else:
@@ -306,17 +310,22 @@ class WrappedModel(nn.Module):
                 #text_features = token_embeddings[:, 0, :].contiguous()
 
             elif self.text_model_builder=='huggingface-transformer':            
-                encoded_input = self.tokenizer(texts, padding=True, truncation=True,return_tensors="pt")
+                encoded_input = self.tokenizer(texts, padding=True, truncation=True, return_tensors="pt", max_length=self.max_seq_length)
                 encoded_input = {
                     'input_ids': encoded_input['input_ids'].to(self.device),
                     'attention_mask': encoded_input['attention_mask'].to(self.device)
                     }
-                text_features = self.text_backbone(**encoded_input)
+                outputs = self.text_backbone(**encoded_input, output_hidden_states=True, return_dict=True)
+                # last_hidden = outputs.last_hidden_state
+                # pooler_output = outputs.pooler_output
+                # hidden_states = outputs.hidden_states
                 
-                if self.text_model == 'facebook/contriever-msmarco':    
-                    text_features = mean_pooling_contriever(text_features[0], encoded_input['attention_mask'])
-                else:
-                    text_features = mean_pooling(text_features, encoded_input['attention_mask'])
+                if self.text_pooler=='mean':
+                    text_features = mean_pooling(outputs.last_hidden_state, encoded_input['attention_mask'])
+                elif self.text_pooler=='cls':
+                    text_features = outputs.pooler_output
+                elif self.text_pooler == 'cls_before_pooler':
+                    text_features = outputs.last_hidden_state[:, 0].contiguous()
 
         if projection:
             text_features = self.text_projection_head(text_features)
@@ -338,12 +347,6 @@ class WrappedModel(nn.Module):
         return image_features, text_features, self.logit_scale.exp()
         
 def mean_pooling(model_output, attention_mask):
-    token_embeddings = model_output[0] #First element of model_output contains all token embeddings
+    token_embeddings = model_output #First element of model_output contains all token embeddings
     input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
-
-
-def mean_pooling_contriever(token_embeddings, mask):
-    token_embeddings = token_embeddings.masked_fill(~mask[..., None].bool(), 0.)
-    sentence_embeddings = token_embeddings.sum(dim=1) / mask.sum(dim=1)[..., None]
-    return sentence_embeddings
