@@ -5,7 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributed as dist
 
-class DINOLoss(nn.Module):
+class ProtoRKDLoss(nn.Module):
     '''
     Emerging Properties in Self-Supervised Vision Transformers
     https://arxiv.org/pdf/2104.14294.pdf
@@ -45,8 +45,11 @@ class DINOLoss(nn.Module):
         # teacher centering and sharpening
         epoch = 0
         temp = self.teacher_temp_schedule[epoch]
+        
         teacher_out = F.softmax((teacher_output - self.center) / temp, dim=-1)
-        #teacher_out = teacher_out.detach().chunk(2)
+        # teacher_out = F.softmax(teacher_output/ temp, dim=-1) # skip centering
+                
+        # teacher_out = teacher_out.detach().chunk(2)
 
         total_loss = torch.sum(-teacher_out * F.log_softmax(student_out, dim=-1), dim=-1).mean()
 

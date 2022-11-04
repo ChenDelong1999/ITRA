@@ -19,6 +19,7 @@ def parse_args():
     
     parser.add_argument("--w-rkd-d", type=float, default=0.5, help="Loss weight.")
     parser.add_argument("--w-rkd-a", type=float, default=1.0, help="Loss weight.")
+    parser.add_argument("--dino-teacher-temp", type=float, default=0.04, help="")
 
     parser.add_argument(
         "--distiller",
@@ -27,8 +28,19 @@ def parse_args():
         help="SimReg, RKD, CompRess, CompRess-1q, CLIP",
     )
     parser.add_argument(
+        "--teacher",
+        type=str,
+        default='text',
+        choices=['text', "image"],
+    )
+    parser.add_argument(
         "--cache-teacher",
         default=None, 
+        type=str,
+        )
+    parser.add_argument(
+        "--cache-dir",
+        default='cache/weights', 
         type=str,
         )
 
@@ -45,6 +57,9 @@ def parse_args():
     parser.add_argument(
         "--text-model", default='', type=str,
         help="In open_clip.list_models() or hugging face transformers",
+    )    
+    parser.add_argument(
+        "--text-model-tag", default='', type=str,
     )    
     parser.add_argument(
         "--text-model-builder",
@@ -71,7 +86,7 @@ def parse_args():
         help="train text?",
     )
     parser.add_argument(
-        "--text-head-n-layers", type=int, default=3,
+        "--text-head-n-layers", type=int, default=0,
         help="how many MLP layers for text projection head",
     )
     parser.add_argument(
@@ -81,6 +96,9 @@ def parse_args():
     parser.add_argument(
         "--image-model", default='', type=str,
         help="In open_clip.list_models() or torchvision",
+    )    
+    parser.add_argument(
+        "--image-model-tag", default='', type=str,
     )    
     parser.add_argument(
         "--image-model-builder",
@@ -100,7 +118,7 @@ def parse_args():
         "--freeze-image-head", action="store_true", default=False,
     )
     parser.add_argument(
-        "--image-head-n-layers", type=int, default=3,
+        "--image-head-n-layers", type=int, default=0,
         help="how many MLP layers for image projection head",
     )
     parser.add_argument(

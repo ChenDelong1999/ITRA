@@ -88,8 +88,12 @@ def train_one_epoch(
             with forward_context():
 
                 if args.distiller in NEED_PROTOTYPE_LAYER:
-                    w = model_without_ddp.image_projection_head.last_layer.weight_v.data.clone()
-                    model_without_ddp.text_projection_head.last_layer.weight_v.data.copy_(w)
+                    if args.teacher=='text':
+                        w = model_without_ddp.image_projection_head.last_layer.weight_v.data.clone()
+                        model_without_ddp.text_projection_head.last_layer.weight_v.data.copy_(w)
+                    elif args.teacher=='image':
+                        w = model_without_ddp.text_projection_head.last_layer.weight_v.data.clone()
+                        model_without_ddp.image_projection_head.last_layer.weight_v.data.copy_(w)
 
                 image_features, text_features, logit_scale = model(images, texts, text_only=(args.cache_teacher is not None) or args.w_distill==0)
 
@@ -115,14 +119,19 @@ def train_one_epoch(
                     image_features_aug = model_without_ddp.encode_image(images_aug, projection=True)
                     ssl_loss = MSE(image_features_aug, image_features.detach())
                 elif args.w_simcse > 0:
-                    ssl_loss = args.w_simcse * simcse_contrastive_loss(all_text_features, all_text_features_2, logit_scale=logit_scale)
+                    ssl_loss = args.w_simcse * simcse_contrastive_loss(all_text_features, all_text_features_2, logit_scale=np.exp(2.996))
                 else:
                     ssl_loss = 0
                 
+                if args.teacher=='text':
+                    teacher_features, student_features = all_text_features, all_image_features
+                elif args.teacher=='image':
+                    teacher_features, student_features = all_image_features, all_text_features
+                
                 if args.distiller in NEED_LOGIT_SCALE:
-                    distill_loss = distiller(all_text_features, all_image_features, logit_scale=logit_scale)
+                    distill_loss = distiller(teacher_features, student_features, logit_scale=logit_scale)
                 else:
-                    distill_loss = distiller(all_text_features, all_image_features)            
+                    distill_loss = distiller(teacher_features, student_features)            
                 total_loss = args.w_distill * distill_loss + ssl_loss
         
         if args.cache_teacher is not None:

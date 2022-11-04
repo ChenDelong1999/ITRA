@@ -36,7 +36,7 @@ from training.scheduler import cosine_lr
 from training.train import train_one_epoch
 from training.evaluations.evaluation import evaluate
 
-from distiller import get_distiller
+from distiller import get_distiller, NEED_LOGIT_SCALE
 
 # to disable warning "huggingface/tokenizers: 
 # ("The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...")
@@ -251,7 +251,12 @@ def main():
                 logging.info(f"=> loaded checkpoint '{args.resume}' (epoch {start_epoch})")
         else:
             logging.info("=> no checkpoint found at '{}'".format(args.resume))
-
+    
+    if args.restart:
+        start_epoch = 0
+        # if args.distiller in NEED_LOGIT_SCALE:
+        #     model.module.reinit_logit_scale(args.logit_scale) if args.distributed else model.reinit_logit_scale(args.logit_scale)
+        #     logging.info(f'logict scale re-initialized to {args.logit_scale}')
         
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # determine if this worker should save logs and checkpoints. only do so if it is rank == 0
@@ -301,8 +306,6 @@ def main():
     profiling = {
         "epsidoe model training time (m)": 0,
     }
-    if args.restart:
-        start_epoch = 0
     for epoch in range(start_epoch, args.epochs):
         if is_master(args):
             logging.info(f'Start epoch {epoch}')

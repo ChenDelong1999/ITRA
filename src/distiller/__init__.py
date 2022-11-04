@@ -9,11 +9,12 @@ from .CLIP import CLIPLoss
 from .DINO import DINOLoss
 from .SEED import SEED
 from .ProtoCPC import protocpc_loss
+from .ProtoRKD import ProtoRKDLoss
 
 NEED_LOGIT_SCALE = ['InfoNCE']
 NEED_GATHER = ['InfoNCE']
 UNI_DIRECTIONAL = ['CompRess-1q', 'SEED', 'DINO', 'ProtoCPC']
-NEED_PROTOTYPE_LAYER = ['DINO', 'ProtoCPC']
+NEED_PROTOTYPE_LAYER = ['DINO', 'ProtoCPC', 'ProtoRKD']
 
 
 def get_distiller(args):
@@ -41,6 +42,8 @@ def get_distiller(args):
         return DINOLoss
     elif args.distiller=='ProtoCPC':
         return protocpc_loss
+    elif args.distiller=='ProtoRKD':
+        return ProtoRKDLoss
 
 
 if __name__=='__main__':

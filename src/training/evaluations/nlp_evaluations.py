@@ -139,6 +139,7 @@ def sts_benchmark(model, args):
     evaluator = EmbeddingSimilarityEvaluator.from_input_examples(test_samples, name='sts-test')
     result_test = evaluator(model)
     logging.info(f'Finished sts-b evaluation, score: {result_dev} (dev), {result_test} (test).')
+    
     return result_dev, result_test
 
 
@@ -155,7 +156,7 @@ def sts12_sts16_eval(model, args):
 
     def batcher(params, batch):
         batch = [' '.join(sent) if sent != [] else '.' for sent in batch]
-        embeddings = model.encode(batch, show_progress_bar=False)
+        embeddings = model.encode(batch, show_progress_bar=False, use_pooler=False)
         return embeddings
 
     # Set up the tasks
@@ -220,6 +221,7 @@ def wiki_sections(model, args):
     result = test_evaluator(model)
     logging.info(f'Finished wiki sections evaluation, score: {result}')
     return result
+
 
 def word_evaluations(model, args):
 
