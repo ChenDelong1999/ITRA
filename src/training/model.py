@@ -3,35 +3,31 @@ import random
 import os
 import torch
 import torch.nn as nn
-from torchvision import transforms
 import numpy as np
-import open_clip
-#from open_clip import trace_model, create_model_and_transforms, create_transforms, list_models, tokenize
-from sentence_transformers import SentenceTransformer
-from transformers import AutoConfig, AutoTokenizer, AutoModel
-#from seed import models
+
 import torchvision
+import open_clip
+from transformers import AutoConfig, AutoTokenizer, AutoModel
+import transformers.adapters
+from sentence_transformers import SentenceTransformer
+
 from training.distributed import is_master
 from training.projection import DINOHead
 from training.prompt import Prompt
+import training.transforms
 
-from transformers.adapters import PrefixTuningConfig
-from transformers.adapters import AdapterConfig
-from transformers.adapters import PfeifferInvConfig
-#from transformers.adapters import LoRAConfig
-from transformers.adapters import CompacterConfig            
-from transformers.adapters import MAMConfig
 from distiller import NEED_LOGIT_SCALE, NEED_PROTOTYPE_LAYER
 from contextlib import suppress
 
 
 def get_model(args):
+    logging.info(f'Builing model for rank {args.rank}')
     
     # === text model === #
     if is_master(args):
         logging.info(f'Loading [{args.text_model}] as text model via [{args.text_model_builder}]. Pretrained={args.pretrained_text_model}')
     
-    if args.text_model_builder=='OpenCLIP':
+    if args.text_model_builder=='openclip':
         CLIP_model, preprocess_train, preprocess_val = open_clip.create_model_and_transforms(
             model_name=args.text_model,
             pretrained=args.text_model_tag if args.pretrained_text_model else '',
@@ -45,8 +41,44 @@ def get_model(args):
         text_backbone = CLIP_model
         tokenizer = open_clip.tokenize
         args.text_width, args.text_dim = text_backbone.text_projection.size()
+        
+        for name, param in text_backbone.named_parameters():
+            param.requires_grad = False if args.lock_text_model else True
     
-    elif args.text_model_builder=='sentence-transformer':
+    elif args.text_model_builder=='huggingface':
+        if not args.pretrained_text_model and is_master(args):
+            logging.info(f'huggingface-transormer uses pretrained weight by default!')
+        config = AutoConfig.from_pretrained(args.text_model, cache_dir=os.path.join(args.cache_dir, 'huggingface'))
+        tokenizer = AutoTokenizer.from_pretrained(args.text_model, cache_dir=os.path.join(args.cache_dir, 'huggingface'))
+        text_backbone = AutoModel.from_pretrained(args.text_model, cache_dir=os.path.join(args.cache_dir, 'huggingface'))
+        args.text_dim = config.hidden_size
+        args.text_width = None
+        for name, param in text_backbone.named_parameters():
+            param.requires_grad = False if args.lock_text_model else True
+        
+        if args.adapter is not None:
+            if args.adapter=='bottleneck_adapter':
+                config = transformers.adapters.AdapterConfig(mh_adapter=True, output_adapter=True, reduction_factor=16, non_linearity="relu")
+            elif args.adapter=='prefix_tuning':
+                config = transformers.adapters.PrefixTuningConfig(flat=False, prefix_length=30)
+            elif args.adapter=='lang_adapter':
+                config = transformers.adapters.PfeifferInvConfig()
+            elif args.adapter=='lora_adapter':
+                config = transformers.adapters.LoRAConfig(r=8, alpha=16)
+            elif args.adapter=='dummy':
+                config = transformers.adapters.CompacterConfig()
+            elif args.adapter=='ia3_adapter':
+                config = transformers.adapters.IA3Config()
+            elif args.adapter=='mam_adapter':
+                config = transformers.adapters.MAMConfig()
+            elif args.adapter=='unipelt':
+                config = transformers.adapters.UniPELTConfig()
+            
+            logging.info(f'[Adapter]: Using adapter: {args.adapter}.')
+            text_backbone.add_adapter(args.adapter, config=config)
+            text_backbone.train_adapter(args.adapter)
+            
+    elif args.text_model_builder=='sbert':
         if not args.pretrained_text_model and is_master(args):
             logging.info(f'Sentence-transormer uses pretrained weight by default!')
         text_backbone = SentenceTransformer(args.text_model, device=args.device).to(args.device)
@@ -54,53 +86,6 @@ def get_model(args):
         args.text_dim = text_backbone.get_sentence_embedding_dimension()
         args.text_width = args.text_dim
     
-    elif args.text_model_builder=='huggingface-transformer':
-        config = AutoConfig.from_pretrained(args.text_model)
-        tokenizer = AutoTokenizer.from_pretrained(args.text_model)
-        text_backbone = AutoModel.from_pretrained(args.text_model)
-        # if tokenizer.pad_token is None:
-        #     tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-        args.text_dim = config.hidden_size
-        args.text_width = None
-
-        
-        logging.info(f'[Adapter]: Using adapter: {args.adapter}.')
-        if args.adapter=='prefix_tuning':
-            config = PrefixTuningConfig(flat=False, prefix_length=args.n_prompt)
-            text_backbone.add_adapter("prefix_tuning", config=config)
-            text_backbone.train_adapter("prefix_tuning")
-
-        elif args.adapter=='bottleneck_adapter':
-            config = AdapterConfig(mh_adapter=True, output_adapter=True, reduction_factor=16, non_linearity="relu")
-            text_backbone.add_adapter("bottleneck_adapter", config=config)
-            text_backbone.train_adapter("bottleneck_adapter")
-
-        elif args.adapter=='lang_adapter':
-            config = PfeifferInvConfig()
-            text_backbone.add_adapter("lang_adapter", config=config)
-            text_backbone.train_adapter("lang_adapter")
-        
-        # elif args.adapter=='lora_adapter':
-        #     config = LoRAConfig(r=8, alpha=16)
-        #     text_backbone.add_adapter("lora_adapter", config=config)
-        #     text_backbone.train_adapter("lang_adapter")
-        #     logging.info(f'[Adapter]: lora_adapter adapter have been added!')
-    
-        elif args.adapter=='dummy':
-            config = CompacterConfig()
-            text_backbone.add_adapter("dummy", config=config)
-            text_backbone.train_adapter("dummy")
-
-        elif args.adapter=='mam_adapter':
-            config = MAMConfig()
-            text_backbone.add_adapter("mam_adapter", config=config)
-            text_backbone.train_adapter("mam_adapter")
-    
-    if args.adapter is None:
-        for name, param in text_backbone.named_parameters():
-            param.requires_grad = True if args.unlock_text_model or 'prefix_tuning' in name else False
-
-
     # === image model === #
     if is_master(args):
         logging.info(f'Loading [{args.image_model}] as image model via [{args.image_model_builder}]. Pretrained={args.pretrained_image_model}')
@@ -120,13 +105,20 @@ def get_model(args):
     
     elif args.image_model_builder=='torchvision':
         image_backbone = torchvision.models.__dict__[args.image_model](pretrained=args.pretrained_image_model, num_classes=1000)
-        if 'resnet' in args.image_model or 'shufflenet' in args.image_model or 'convnext' in args.image_model:
+
+        LAST_FC = ['resnet', 'shufflenet', 'convnext', 'regnet', 'inception']
+        CLASSIFIER_WITH_DROPOUT = ['alexnet', 'squeezenet', 'mnasnet']
+        CLASSIFIER_WITHOUT_DROPOUT = ['mobilenet', 'vgg', 'densenet', 'googlenet']
+        LAST_HEAD = ['vit']
+
+        if 'resnet' in args.image_model or 'shufflenet' in args.image_model or 'convnext' in args.image_model or 'regnet' in args.image_model or 'inception' in args.image_model:
             image_backbone.output_dim = image_backbone.fc.weight.shape[1]
             image_backbone.fc=torch.nn.Identity()
-        if 'alexnet' in args.image_model:
+        if 'alexnet' in args.image_model or 'squeezenet' in args.image_model or 'mnasnet' in args.image_model: 
+            # there are dropout layer between first linear layer in the classifier # TODO: squeeze net has conv2d instead of linear
             image_backbone.output_dim = image_backbone.classifier[1].weight.shape[1]
             image_backbone.classifier=torch.nn.Identity()
-        if 'mobilenet' in args.image_model:
+        if 'mobilenet' in args.image_model or 'vgg' in args.image_model or 'densenet' in args.image_model or 'googlenet' in args.image_model :
             image_backbone.output_dim = image_backbone.classifier[0].weight.shape[1]
             image_backbone.classifier=torch.nn.Identity()
         if 'vit' in args.image_model:
@@ -135,23 +127,11 @@ def get_model(args):
             image_backbone.head=torch.nn.Identity()
         image_backbone.to(device=args.device)
 
-        normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                        std=[0.229, 0.224, 0.225])
-        preprocess_train = transforms.Compose([
-            transforms.RandomSizedCrop(224),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            normalize,
-        ])
-        preprocess_val = transforms.Compose([
-            transforms.Scale(256),
-            transforms.CenterCrop(224),
-            transforms.ToTensor(),
-            normalize,
-        ])
-        
+        preprocess_train, preprocess_val = training.transforms.preprocess_train, training.transforms.preprocess_val
+
+                
     for param in image_backbone.parameters():
-        param.requires_grad = True if args.unlock_image_model else False
+        param.requires_grad = False if args.lock_image_model else True
 
     model = WrappedModel(
         text_backbone=text_backbone, 
@@ -184,15 +164,14 @@ class WrappedModel(nn.Module):
         self.text_model_builder = args.text_model_builder
         self.max_seq_length = args.max_seq_length
             
-        self.image_context = suppress if args.unlock_image_model else torch.no_grad
-        self.text_context = suppress if (args.unlock_text_model or args.prompt or args.adapter is not None) else torch.no_grad
+        self.image_context = torch.no_grad if args.lock_image_model else suppress 
+        self.text_context = torch.no_grad if args.lock_text_model and args.adapter is None else suppress
         
         if is_master(args):
             logging.info(f'image_context: {str(self.image_context)}')
             logging.info(f'text_context: {str(self.text_context)}')
-        self.unlock_text_model = args.unlock_text_model
         
-        # TODO: text prompt (optional) 
+        # TODO: CoOp text prompt (optional) 
         if args.prompt:
             self.prompt = nn.Parameter(torch.empty(args.n_prompt, args.text_width))
             torch.nn.init.normal_(self.prompt, std=0.02)
@@ -304,11 +283,12 @@ class WrappedModel(nn.Module):
     
     def encode_text(self, texts, projection=False, use_pooler=True):
         with self.text_context():
-            if self.text_model_builder=='OpenCLIP':
+            if self.text_model_builder=='openclip':
+                # TODO: support CoOp-style prompting
                 context_length = (77 - self.n_prompt) if self.prompt is not None else 77
                 texts = self.tokenizer(texts, context_length=context_length).to(self.device)
                 def open_clip_forward(texts):
-                    x = self.text_backbone.token_embedding(texts)  # [batch_size, n_ctx, d_model] (64, 77-args.n_prompts, 512)
+                    x = self.text_backbone.token_embedding(texts)  # [batch_size, n_ctx, d_model] (bs, 77-args.n_prompts, 512)
                     if self.prompt is not None:
                         batch_prompt = self.prompt.unsqueeze(0).expand(x.size(0), -1, -1)
                         x = torch.cat([x[:, :1, :], batch_prompt, x[:, 1:, :]], dim=1)
@@ -322,7 +302,7 @@ class WrappedModel(nn.Module):
                     return x
                 text_features = open_clip_forward(texts)
             
-            elif self.text_model_builder=='sentence-transformer':            
+            elif self.text_model_builder=='sbert':            
                 texts = self.text_backbone.tokenize(texts)
                 texts = {
                     'input_ids': texts['input_ids'].to(self.device),
@@ -334,7 +314,7 @@ class WrappedModel(nn.Module):
                 #token_embeddings = text_features['token_embeddings']
                 #text_features = token_embeddings[:, 0, :].contiguous()
 
-            elif self.text_model_builder=='huggingface-transformer':           
+            elif self.text_model_builder=='huggingface':           
                 # Preprocess
                 if self.text_pooler == 'PromptBERT':
                     texts_lengths = [] # memorize the number of token of each sentence for position id padding

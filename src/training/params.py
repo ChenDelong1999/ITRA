@@ -14,6 +14,83 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    # Model Architechture Configurations
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+
+    # === text model === #  
+    parser.add_argument(
+        "--text-model-builder",
+        choices=['openclip', 'huggingface', 'sbert'], required=True,
+        help="use which libarary to build the text backbone",
+    )  
+    parser.add_argument(
+        "--text-model", default='', type=str, required=True,
+        help="In open_clip.list_models() or hugging face transformers, depend on text-model-builder",
+    )    
+    parser.add_argument(
+        "--text-model-tag", default='openai', type=str,
+        help="Use open_clip.list_pretrained_model_tags(your_model) to check available pretrained weights",
+    )     
+    parser.add_argument(
+        "--text-pooler", type=str, default='cls',
+        help="specify pooling streategy for models built by hugging face",
+    )
+    parser.add_argument(
+        "--pretrained-text-model", action="store_true", default=False,
+        help="whether load pretrained weigth for the text backbone", 
+        # TODO: support build model from scratch for huggingface transformer
+    )
+    parser.add_argument(
+        "--lock-text-model", action="store_true", default=False,
+        help="whether include text backbone parameters in the optimizer",
+    )
+    parser.add_argument(
+        "--text-head-n-layers", type=int, default=0,
+        help="how many MLP layers for text projection head",
+    )
+    parser.add_argument(
+        "--max-seq-length", type=int, default=77,
+        help="Maximum sequence length for the text backbone",
+    )
+    # TODO: check the implementation of CoOp-style prompt tuning
+    parser.add_argument("--prompt", action="store_true", default=False)
+    parser.add_argument("--n-prompt", type=int, default=1)
+    parser.add_argument(
+        "--adapter", type=str, default=None,
+        help="Path to csv filewith training data",
+    )
+    
+    # === image model === #
+    parser.add_argument(
+        "--image-model", default='', type=str,
+        help="In open_clip.list_models() or torchvision.models",
+    )    
+    parser.add_argument(
+        "--image-model-tag", default='', type=str,
+    )    
+    parser.add_argument(
+        "--image-model-builder",
+        choices=['OpenCLIP', "torchvision"], default='OpenCLIP',
+        help="use which libarary to build the image backbone",
+    ) 
+    parser.add_argument(
+        "--pretrained-image-model", action="store_true", default=False,
+        help="whether load pretrained weigth for the image backbone"
+    )
+    parser.add_argument(
+        "--lock-image-model", action="store_true", default=False,
+        help="train image?",
+    )
+    parser.add_argument(
+        "--image-head-n-layers", type=int, default=0,
+        help="how many MLP layers for image projection head",
+    )
+    parser.add_argument(
+        "--joint-projection-dim", type=int, default=1024,
+        help="dimension of projected representations",
+    )
+
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Knowledge Distillation Configurations
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     
@@ -50,102 +127,6 @@ def parse_args():
     
     parser.add_argument("--logit-scale", type=float, default=0.07, help="temperature")
 
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    # Knowledge Distillation Model
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    # === text model === #
-    parser.add_argument(
-        "--text-model", default='', type=str,
-        help="In open_clip.list_models() or hugging face transformers",
-    )    
-    parser.add_argument(
-        "--text-model-tag", default='', type=str,
-    )    
-    parser.add_argument(
-        "--text-model-builder",
-        choices=['OpenCLIP', "sentence-transformer", "huggingface-transformer"],
-        default='OpenCLIP',
-        help="how to build the text model",
-    ) 
-    
-    parser.add_argument(
-        "--text-pooler",
-        type=str,
-        default='mean',
-    )
-    parser.add_argument(
-        "--pretrained-text-model", action="store_true", default=False,
-        help="pretrained text?",
-    )
-    parser.add_argument(
-        "--unlock-text-model", action="store_true", default=False,
-        help="train text?",
-    )
-    parser.add_argument(
-        "--freeze-text-head", action="store_true", default=False,
-        help="train text?",
-    )
-    parser.add_argument(
-        "--text-head-n-layers", type=int, default=0,
-        help="how many MLP layers for text projection head",
-    )
-    parser.add_argument(
-        "--max-seq-length", type=int, default=77
-    )
-    # === image model === #
-    parser.add_argument(
-        "--image-model", default='', type=str,
-        help="In open_clip.list_models() or torchvision",
-    )    
-    parser.add_argument(
-        "--image-model-tag", default='', type=str,
-    )    
-    parser.add_argument(
-        "--image-model-builder",
-        choices=['OpenCLIP', "torchvision"],
-        default='OpenCLIP',
-        help="how to build the image model",
-    ) 
-    parser.add_argument(
-        "--pretrained-image-model", action="store_true", default=False,
-        help="pretrained image?",
-    )
-    parser.add_argument(
-        "--unlock-image-model", action="store_true", default=False,
-        help="train image?",
-    )
-    parser.add_argument(
-        "--freeze-image-head", action="store_true", default=False,
-    )
-    parser.add_argument(
-        "--image-head-n-layers", type=int, default=0,
-        help="how many MLP layers for image projection head",
-    )
-    parser.add_argument(
-        "--joint-projection-dim", type=int, default=1024,
-        help="dimension of projected representations",
-    ) 
-    parser.add_argument(
-        "--unlock-text-teacher",
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument(
-        "--prompt",
-        action="store_true",
-        default=False,
-    )
-    parser.add_argument(
-        "--n-prompt",
-        type=int,
-        default=1,
-    )
-    parser.add_argument(
-        "--adapter",
-        type=str,
-        default=None,
-        help="Path to csv filewith training data",
-    )
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Data and Episodic training
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 

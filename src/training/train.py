@@ -39,11 +39,11 @@ def train_one_epoch(
     model.train()  
     model_without_ddp = model.module if args.distributed else model
     
-    if not args.unlock_text_model and args.adapter is None:
+    if args.lock_text_model and args.adapter is None:
         model_without_ddp.text_backbone.eval()
         if is_master(args):
             logging.info('set text backbone to .eval() mode')
-    if not args.unlock_image_model:
+    if args.lock_image_model:
         model_without_ddp.image_backbone.eval()
         if is_master(args):
             logging.info('set image backbone to .eval() mode')

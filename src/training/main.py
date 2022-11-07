@@ -42,6 +42,7 @@ from distiller import get_distiller, NEED_LOGIT_SCALE
 # ("The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+
 # fix random seed
 def random_seed(seed):
     torch.manual_seed(seed)
@@ -61,18 +62,21 @@ def main():
     # get the name of the experiments
     if args.name is None:
         args.name = '-'.join([
-            'U' if args.unlock_image_model else 'L',
+            'L' if args.lock_image_model else 'U',
             f'[{args.image_model.replace("/", "_")}-h{args.image_head_n_layers}]',
-            'U' if args.unlock_text_model else 'L',
+            'L' if args.lock_text_model else 'U',
             f'[{args.text_model.replace("/", "_")}-h{args.text_head_n_layers}]',
             f"b_{int(args.batch_size * args.world_size)}",
             f"ep_{args.epochs}",
-            datetime.now().strftime("%Y_%m_%d-%H_%M_%S"),
+            datetime.now().strftime("%m_%d-%H_%M_%S"),
         ])
     args.name.replace('/', '_')
 
     args.log_path = None
     if is_master(args, local=args.log_local):
+        if os.path.exists(os.path.join(args.logs, args.name)):
+            args.name += '-'+datetime.now().strftime("%m_%d-%H_%M_%S")
+            print(f"args.name is changed to '{args.name}' to avoid duplication.")
         log_base_path = os.path.join(args.logs, args.name)
         os.makedirs(log_base_path, exist_ok=True)
         log_filename = f'out-{args.rank}' if args.log_local else 'out.log'
@@ -130,7 +134,18 @@ def main():
     # Build teacher, student and distiller
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
-    model, preprocess_train, preprocess_val, preprocess_aug = get_model(args)
+    # Set barriers to avoid multiple downloads of pretrained weights
+    if args.pretrained_text_model or args.pretrained_image_model and args.distributed:
+        if is_master(args):
+            model, preprocess_train, preprocess_val, preprocess_aug = get_model(args)
+        dist.barrier()   
+
+        if not is_master(args): 
+            model, preprocess_train, preprocess_val, preprocess_aug = get_model(args)
+        dist.barrier()   
+    else:
+        model, preprocess_train, preprocess_val, preprocess_aug = get_model(args)
+
     
     if args.distributed and not args.horovod:
         if args.use_bn_sync:
