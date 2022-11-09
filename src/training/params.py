@@ -20,11 +20,11 @@ def parse_args():
     # === text model === #  
     parser.add_argument(
         "--text-model-builder",
-        choices=['openclip', 'huggingface', 'sbert'], required=True,
+        choices=['openclip', 'huggingface', 'sbert'], 
         help="use which libarary to build the text backbone",
     )  
     parser.add_argument(
-        "--text-model", default='', type=str, required=True,
+        "--text-model", default='', type=str, 
         help="In open_clip.list_models() or hugging face transformers, depend on text-model-builder",
     )    
     parser.add_argument(
@@ -395,7 +395,10 @@ def parse_args():
     parser.add_argument(
         "--seed", type=int, default=0, help="Default random seed."
     )
-    args = parser.parse_args()
+    
+    # args = parser.parse_args()
+    args, unknown = parser.parse_known_args() # to be compatible with ELVATER
+    print(f'Unknow args: {unknown}')
 
     # If some params are not passed, we use the default values based on model name.
     default_params = get_default_params(args.image_model)

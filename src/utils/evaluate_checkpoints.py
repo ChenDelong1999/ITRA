@@ -61,10 +61,10 @@ if __name__ == '__main__':
     args = load_params(params_file, args)
 
     args.nlp_eval_frequency = 1
-    args.zeroshot_frequency = 0
-    args.linear_frequency = 0
+    args.zeroshot_frequency = 1
+    args.linear_frequency = 1
     #args.linear_prob_mode= 'pytorch-search'
-    args.retrieval_frequency = 0
+    args.retrieval_frequency = 1
     args.save_logs = False
     args.distributed = False
     args.wandb = False
@@ -72,6 +72,8 @@ if __name__ == '__main__':
     args.batch_size = 32
     args.workers = 12
     args.image_teacher='none'
+    args.pretrained_text_model = False
+    args.pretrained_image_model = False
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     logging.info(f"Loaded params from file '{params_file}':")

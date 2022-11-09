@@ -107,14 +107,14 @@ def get_model(args):
         image_backbone = torchvision.models.__dict__[args.image_model](pretrained=args.pretrained_image_model, num_classes=1000)
 
         LAST_FC = ['resnet', 'shufflenet', 'convnext', 'regnet', 'inception']
-        CLASSIFIER_WITH_DROPOUT = ['alexnet', 'squeezenet', 'mnasnet']
+        CLASSIFIER_WITH_DROPOUT = ['alexnet', 'squeezenet', 'mnasnet', 'efficientnet']
         CLASSIFIER_WITHOUT_DROPOUT = ['mobilenet', 'vgg', 'densenet', 'googlenet']
         LAST_HEAD = ['vit']
 
         if 'resnet' in args.image_model or 'shufflenet' in args.image_model or 'convnext' in args.image_model or 'regnet' in args.image_model or 'inception' in args.image_model:
             image_backbone.output_dim = image_backbone.fc.weight.shape[1]
             image_backbone.fc=torch.nn.Identity()
-        if 'alexnet' in args.image_model or 'squeezenet' in args.image_model or 'mnasnet' in args.image_model: 
+        if 'alexnet' in args.image_model or 'squeezenet' in args.image_model or 'mnasnet' in args.image_model or 'efficientnet' in args.image_model: 
             # there are dropout layer between first linear layer in the classifier # TODO: squeeze net has conv2d instead of linear
             image_backbone.output_dim = image_backbone.classifier[1].weight.shape[1]
             image_backbone.classifier=torch.nn.Identity()
@@ -140,8 +140,8 @@ def get_model(args):
         args=args
         )
                 
-    if is_master(args):
-        logging.info('Model created\n' +str(model))
+    # if is_master(args):
+    #     logging.info('Model created\n' +str(model))
     
     return model, preprocess_train, preprocess_val, preprocess_val
 
@@ -181,6 +181,7 @@ class WrappedModel(nn.Module):
 
     # image backbone
         self.image_backbone = image_backbone
+        # self.visual = None
         self.image_dim = image_backbone.output_dim
 
         # if self.text_dim!=self.image_dim and args.text_head_n_layers+args.image_head_n_layers==0:

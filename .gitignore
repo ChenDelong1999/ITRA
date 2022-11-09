@@ -1,11 +1,12 @@
 logs/
 wandb/
-models/
+# models/
 features/
 results/
 weights/
 cache/
 data/
+src/training/evaluations/vision_benchmark/outputs
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

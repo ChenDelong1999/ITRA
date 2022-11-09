@@ -403,7 +403,7 @@ def copy_codebase(args):
     current_code_path = os.path.realpath(__file__)
     for _ in range(3):
         current_code_path = os.path.dirname(current_code_path)
-    copytree(current_code_path, new_code_path, ignore=ignore_patterns('log', 'logs', 'wandb', 'cache', 'features', 'weights'))
+    copytree(current_code_path, new_code_path, ignore=ignore_patterns('log', 'logs', 'wandb', 'cache', 'features', 'weights', 'src/training/evaluations/vision_benchmark'))
     print("Done copying code.")
     return 1
 
