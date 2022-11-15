@@ -181,16 +181,14 @@ def main():
             logging.info(f"Model will be trained with epoch-wise training strategy.")
 
     data = get_data(args, (preprocess_train, preprocess_val, preprocess_aug), index_mapping=index_mapping)
-    if is_master(args):
-        logging.info(f'Dataset initialized:')
-        logging.info(f'\tdataset length: \t{len(data["train"].dataset)}')
-        logging.info(f'\tdataloader length: \t{len(data["train"].dataloader)}')
-        if data["train"].sampler is not None:
-            logging.info(f'\tsampler length: \t{len(data["train"].sampler)}')
-
-
-    if args.train_data is not None and args.dataset_size is None:
-        args.dataset_size = len(data['train'].dataset.captions) if args.train_data !='coco' else len(data['train'].dataset)
+    
+    if args.train_data is not None:
+        if is_master(args):
+            logging.info(f'Dataset initialized:')
+            logging.info(f'\tdataset n_sample: \t{len(data["train"].dataset)}')
+            logging.info(f'\tdataloader n_step: \t{len(data["train"].dataloader)}')
+        if args.dataset_size is None:
+            args.dataset_size = len(data['train'].dataset.captions) if args.train_data !='coco' else len(data['train'].dataset)
     if not args.episodic_training:
         args.episode_size = args.dataset_size
 
@@ -207,13 +205,18 @@ def main():
         
         if is_master(args):
             logging.info(f"Prameters to be optimized:")
+            n_trainable_params = 0
             for n, p in named_parameters:
                 if p.requires_grad:
-                    logging.info(f'\t{n}\t{p.size()}')
+                    logging.info(f'\t{n}\t{list(p.size())}')
+                    n_trainable_params += p.numel()
             logging.info(f"Prameters NOT to be optimized:")
+            n_frozen_params = 0
             for n, p in named_parameters:
                 if not p.requires_grad:
-                    logging.info(f'\t{n}\t{p.size()}')
+                    logging.info(f'\t{n}\t{list(p.size())}')
+                    n_frozen_params += p.numel()
+                        
         gain_or_bias_params = [p for n, p in named_parameters if exclude(n, p) and p.requires_grad]
         rest_params = [p for n, p in named_parameters if include(n, p) and p.requires_grad]
 
@@ -234,6 +237,18 @@ def main():
         scaler = GradScaler() if args.precision == "amp" else None
         total_steps = data["train"].dataloader.num_batches * args.epochs
         scheduler = cosine_lr(optimizer, args.lr, args.warmup, total_steps)
+    
+    if is_master(args):
+        model_without_ddp = model.module if args.distributed else model
+        logging.info('Model\n' +str(model))
+        logging.info(f'Total Model Parameters (M):\t        {round(sum(p.numel() for p in model_without_ddp.parameters())/1e6, 2)}')
+        logging.info(f'Image Backbone Parameters (M):\t     {round(sum(p.numel() for p in model_without_ddp.image_backbone.parameters())/1e6, 2)}')
+        logging.info(f'Text Backbone Parameters (M):\t      {round(sum(p.numel() for p in model_without_ddp.text_backbone.parameters())/1e6, 2)}')
+        logging.info(f'Image Projection Parameters (M):\t   {round(sum(p.numel() for p in model_without_ddp.image_projection_head.parameters())/1e6, 2)}')
+        logging.info(f'Text Projection Parameters (M):\t    {round(sum(p.numel() for p in model_without_ddp.text_projection_head.parameters())/1e6, 2)}')
+        if args.train_data:
+            logging.info(f'Trainable Parameters (M):\t{round(n_trainable_params/1e6, 2)}')
+            logging.info(f'Frozen Parameters (M):\t{round(n_frozen_params/1e6, 2)}')
 
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 

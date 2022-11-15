@@ -70,7 +70,7 @@ def parse_args():
     )    
     parser.add_argument(
         "--image-model-builder",
-        choices=['OpenCLIP', "torchvision"], default='OpenCLIP',
+        choices=['openclip', "torchvision", "torchhub"], default='OpenCLIP',
         help="use which libarary to build the image backbone",
     ) 
     parser.add_argument(
@@ -178,7 +178,7 @@ def parse_args():
         help="For csv-like datasets, the name of the key for the captions."
     )
     parser.add_argument(
-        "--workers", type=int, default=1, help="Number of workers per GPU."
+        "--workers", type=int, default=8, help="Number of workers per GPU."
     )
     parser.add_argument(
         "--episode-size",
@@ -190,24 +190,24 @@ def parse_args():
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Projection head
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    parser.add_argument(
-        "--projection-dim",
-        type=int,
-        default=128,
-        help="dimension of projected representations",
-    ) 
-    parser.add_argument(
-        "--projection-hidden-dim",
-        type=int,
-        default=2048,
-        help="dimension of projected representations",
-    ) 
-    parser.add_argument(
-        "--projection-n-layers",
-        type=int,
-        default=1,
-        help="dimension of projected representations",
-    ) 
+    # parser.add_argument(
+    #     "--projection-dim",
+    #     type=int,
+    #     default=128,
+    #     help="dimension of projected representations",
+    # ) 
+    # parser.add_argument(
+    #     "--projection-hidden-dim",
+    #     type=int,
+    #     default=2048,
+    #     help="dimension of projected representations",
+    # ) 
+    # parser.add_argument(
+    #     "--projection-n-layers",
+    #     type=int,
+    #     default=1,
+    #     help="dimension of projected representations",
+    # ) 
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Logging and checkpointing
@@ -398,7 +398,8 @@ def parse_args():
     
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args() # to be compatible with ELVATER
-    print(f'Unknow args: {unknown}')
+    if len(unknown)>0:
+        print(f'Unknow args: {unknown}')
 
     # If some params are not passed, we use the default values based on model name.
     default_params = get_default_params(args.image_model)

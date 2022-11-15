@@ -25,7 +25,7 @@ def setup_logger(final_output_dir, rank, phase):
     console.setFormatter(
         logging.Formatter(head)
     )
-    # logging.getLogger('').addHandler(console)
+    logging.getLogger('').addHandler(console)
     
     file_handler = logging.FileHandler(filename=str(final_log_file))
     formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s', datefmt='%Y-%m-%d,%H:%M:%S')

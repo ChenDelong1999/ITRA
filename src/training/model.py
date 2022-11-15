@@ -44,6 +44,9 @@ def get_model(args):
         
         for name, param in text_backbone.named_parameters():
             param.requires_grad = False if args.lock_text_model else True
+            
+        if args.adapter is not None:
+            raise RuntimeError(f'Adapter {args.adapter} is not avaliable for {args.text_model_builder} models!')
     
     elif args.text_model_builder=='huggingface':
         if not args.pretrained_text_model and is_master(args):
@@ -73,6 +76,8 @@ def get_model(args):
                 config = transformers.adapters.MAMConfig()
             elif args.adapter=='unipelt':
                 config = transformers.adapters.UniPELTConfig()
+            else:
+                raise RuntimeError(f'Adapter {args.adapter} is not avaliable for {args.text_model_builder} models!')
             
             logging.info(f'[Adapter]: Using adapter: {args.adapter}.')
             text_backbone.add_adapter(args.adapter, config=config)
@@ -85,12 +90,15 @@ def get_model(args):
         tokenizer = None
         args.text_dim = text_backbone.get_sentence_embedding_dimension()
         args.text_width = args.text_dim
+        
+        if args.adapter is not None:
+            raise RuntimeError(f'Adapter {args.adapter} is not avaliable for {args.text_model_builder} models!')
     
     # === image model === #
     if is_master(args):
         logging.info(f'Loading [{args.image_model}] as image model via [{args.image_model_builder}]. Pretrained={args.pretrained_image_model}')
     
-    if args.image_model_builder=='OpenCLIP':
+    if args.image_model_builder=='openclip':
         CLIP_model, preprocess_train, preprocess_val = open_clip.create_model_and_transforms(
             model_name=args.image_model,
             pretrained=args.image_model_tag if args.pretrained_image_model else '',
@@ -104,6 +112,7 @@ def get_model(args):
         args.image_dim = image_backbone.output_dim
     
     elif args.image_model_builder=='torchvision':
+        os.environ['TORCH_HOME'] = os.path.join(args.cache_dir, 'torchvision')
         image_backbone = torchvision.models.__dict__[args.image_model](pretrained=args.pretrained_image_model, num_classes=1000)
 
         LAST_FC = ['resnet', 'shufflenet', 'convnext', 'regnet', 'inception']
@@ -128,6 +137,27 @@ def get_model(args):
         image_backbone.to(device=args.device)
 
         preprocess_train, preprocess_val = training.transforms.preprocess_train, training.transforms.preprocess_val
+    
+    
+    elif args.image_model_builder=='torchhub':
+        if not args.pretrained_image_model and is_master(args):
+            logging.info(f'Torch hub uses pretrained weight by default!')
+
+        torch.hub.set_dir(os.path.join(args.cache_dir, 'torchhub'))
+        
+        # https://stackoverflow.com/questions/68901236/urllib-error-httperror-http-error-403-rate-limit-exceeded-when-loading-resnet1
+        torch.hub._validate_not_a_forked_repo=lambda a,b,c: True 
+
+        image_backbone = torch.hub.load(args.image_model_tag, args.image_model)
+        if 'resnet' in args.image_model:            
+            image_backbone.output_dim = image_backbone.fc.weight.shape[1]
+            image_backbone.fc=torch.nn.Identity()
+            
+        if 'vit' in args.image_model or 'xcit' in args.image_model:            
+            image_backbone.output_dim = image_backbone.norm.weight.size(0)
+
+        if 'regnety' in args.image_model:            
+            image_backbone.output_dim = 2048
 
                 
     for param in image_backbone.parameters():
@@ -139,10 +169,7 @@ def get_model(args):
         tokenizer=tokenizer, 
         args=args
         )
-                
-    # if is_master(args):
-    #     logging.info('Model created\n' +str(model))
-    
+        
     return model, preprocess_train, preprocess_val, preprocess_val
 
 
@@ -183,14 +210,6 @@ class WrappedModel(nn.Module):
         self.image_backbone = image_backbone
         # self.visual = None
         self.image_dim = image_backbone.output_dim
-
-        # if self.text_dim!=self.image_dim and args.text_head_n_layers+args.image_head_n_layers==0:
-        #     raise AssertionError(f'text and backbone feature dimension do not match ({self.text_dim} vs {self.image_dim}), projection head nlayer > 0 is needed!')
-
-        if args.image_head_n_layers==0:
-            if is_master(args):
-                    logging.info('Image backbone do not append projection head so set args.joint_projection_dim = self.image_dim')
-            args.joint_projection_dim = self.image_dim
 
     # text projection head
         if args.text_head_n_layers > 0 or args.distiller in NEED_PROTOTYPE_LAYER:
