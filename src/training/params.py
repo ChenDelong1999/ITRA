@@ -66,7 +66,7 @@ def parse_args():
         help="In open_clip.list_models() or torchvision.models",
     )    
     parser.add_argument(
-        "--image-model-tag", default='', type=str,
+        "--image-model-tag", default='openai', type=str,
     )    
     parser.add_argument(
         "--image-model-builder",
@@ -86,7 +86,7 @@ def parse_args():
         help="how many MLP layers for image projection head",
     )
     parser.add_argument(
-        "--joint-projection-dim", type=int, default=1024,
+        "--joint-projection-dim", type=int, default=-1,
         help="dimension of projected representations",
     )
 
@@ -102,7 +102,7 @@ def parse_args():
         "--distiller",
         type=str,
         default='SimReg',
-        help="SimReg, RKD, CompRess, CompRess-1q, CLIP",
+        help="SimReg, RKD, CompRess, CompRess-1q, InfoNCE, etc.",
     )
     parser.add_argument(
         "--teacher",
@@ -130,6 +130,8 @@ def parse_args():
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Data and Episodic training
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    
+    parser.add_argument("--nori-dataset", action="store_true", default=False)
     parser.add_argument(
         "--train-data",
         type=str,
@@ -186,6 +188,37 @@ def parse_args():
         default=0,
         help="Set episode_size to 0 to disable episodic training",
     )  
+
+    parser.add_argument("--retrieval-nori-dataset", action="store_true", default=False)
+    parser.add_argument(
+        "--retrieval-data",
+        type=str,
+        default=None,
+        help="Path to csv filewith retrieval data",
+    )
+    parser.add_argument(
+        "--retrieval-csv-separator",
+        type=str,
+        default="\t",
+        help="For csv-like datasets, which separator to use."
+    )
+    parser.add_argument(
+        "--retrieval-csv-img-key",
+        type=str,
+        default="filepath",
+        help="For csv-like datasets, the name of the key for the image paths."
+    )
+    parser.add_argument(
+        "--retrieval-csv-caption-key",
+        type=str,
+        default="title",
+        help="For csv-like datasets, the name of the key for the captions."
+    )
+    parser.add_argument(
+        "--retrieval-images-dir",
+        type=str,
+        default="",
+    )
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Projection head

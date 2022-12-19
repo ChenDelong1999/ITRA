@@ -49,17 +49,16 @@ class COCOCaptionsDataset(Dataset):
 
 
 class CsvDataset(Dataset):
-    def __init__(self, input_filename, transforms, img_key, caption_key, aug=None, sep="\t", dataset_size=None, index_mapping=None, skip_image=False):
+    def __init__(self, input_filename, transforms, img_key, caption_key, aug=None, sep="\t", dataset_size=None, index_mapping=None, skip_image=False, nori_dataset=False, images_dir=''):
         logging.debug(f'Loading csv data from {input_filename}.')
         if input_filename[:2]=='s3':
-            self.using_nori = True
             df = pd.read_csv(smart_open(input_filename, "r"), sep=sep)
-            self.f = None
         else:
-            #self.using_nori = False
-            self.using_nori = True
-            self.f = None
             df = pd.read_csv(input_filename, sep=sep)
+        
+        self.nori_dataset = nori_dataset
+        self.f = None
+        self.images_dir = images_dir
 
         self.images = df[img_key].tolist()
         self.captions = df[caption_key].tolist()
@@ -102,12 +101,12 @@ class CsvDataset(Dataset):
             images = texts # skip image forward for efficient teacher caching 
         else:
             #images = self.transforms(Image.open(str(self.images[index])))
-            if self.using_nori:
+            if self.nori_dataset:
                 if self.f is None:
                     self.f = nori.Fetcher()
                 image = Image.open(io.BytesIO(self.f.get(self.images[index].decode('utf-8'))))
             else:
-                image = Image.open(str(self.images[index].decode('utf-8')))
+                image = Image.open(os.path.join(self.images_dir, str(self.images[index].decode('utf-8'))))
             
             image_train = self.transforms(image)
             if self.aug is not None:
@@ -115,13 +114,13 @@ class CsvDataset(Dataset):
             else:
                 images = image_train
         
-        return episodic_index, images, texts #[:100]# FIXME: '[:100]' is a temperate solution of CLIP's tokenizer overlength bug
-    
+        return episodic_index, images, texts
+
     def get_data(self, episode_index):
         idx = self.index_mapping[episode_index]
             
         # get image data
-        if self.using_nori:
+        if self.nori_dataset:
             if self.f is None:
                 self.f = nori.Fetcher()
             pic = Image.open(io.BytesIO(self.f.get(self.images[idx].decode('utf-8'))))
@@ -231,6 +230,7 @@ def get_csv_dataset(args, preprocess_fn, aug, is_train, index_mapping):
             dataset_size=args.dataset_size,
             index_mapping=index_mapping,
             #skip_image=args.cache_teacher is not None
+            nori_dataset=args.nori_dataset
             )
     num_samples = len(dataset)
     sampler = DistributedSampler(dataset) if args.distributed and is_train else None

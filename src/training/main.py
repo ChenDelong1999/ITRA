@@ -138,11 +138,13 @@ def main():
     if args.pretrained_text_model or args.pretrained_image_model and args.distributed:
         if is_master(args):
             model, preprocess_train, preprocess_val, preprocess_aug = get_model(args)
-        dist.barrier()   
+        if args.distributed:
+            dist.barrier()   
 
         if not is_master(args): 
             model, preprocess_train, preprocess_val, preprocess_aug = get_model(args)
-        dist.barrier()   
+        if args.distributed:
+            dist.barrier()   
     else:
         model, preprocess_train, preprocess_val, preprocess_aug = get_model(args)
 

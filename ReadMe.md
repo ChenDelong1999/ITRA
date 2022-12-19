@@ -1,24 +1,46 @@
+<!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
+<a name="readme-top"></a>
 
 <p align="center">
 <img style="vertical-align:middle" src="assets/pipeline.png" />
 </p>
 
 <h2 align="center">
-<span>[My Codebase Name]</span>
+<span><strong>ITRA</strong></span>
 </h3>
-
-Flexible
-Representation
-Alignment
-
-TiRepAlign
 
 
 <h3 align="center">
-A compositional codebase for flexible vision language representation learning.
+A codebase for flexible and efficient <b><u>I</u></b>mage <b><u>T</u></b>ext <b><u>R</u></b>epresentation <b><u>A</u></b>lignment
 </h4>
 
-# Summary
+<!-- 
+<br />
+<details>
+  <summary>Table of Contents</summary>
+  <ol>
+    <li>
+      <a href="#about-this-codebase">About This Codebase</a>
+    </li>
+    <li>
+      <a href="#getting-started">Getting Started</a>
+      <ul>
+        <li><a href="#prerequisites">Prerequisites</a></li>
+        <li><a href="#installation">Installation</a></li>
+      </ul>
+    </li>
+    <li><a href="#usage">Usage</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
+    <li><a href="#contributing">Contributing</a></li>
+    <li><a href="#license">License</a></li>
+    <li><a href="#contact">Contact</a></li>
+    <li><a href="#acknowledgments">Acknowledgments</a></li>
+  </ol>
+</details>
+<br />
+ -->
+
+# About This Codebase
 
 **Model Builder**
 - [OpenCLIP](https://github.com/mlfoundations/open_clip)
@@ -42,11 +64,168 @@ A compositional codebase for flexible vision language representation learning.
 - Zero-shot VQA ([TAP-C](https://arxiv.org/abs/2203.07190)) and visual entailment 
 
 
+# Getting Started
+## 1. Install Dependencies
+- Create a conda environment and install PyTorch:
+
+    ```bash
+    conda create -n ITRA python=3.10.0
+    conda activate ITRA
+    ```
+
+    This repo requirs PyTorch (1.11.0) and torchvision. Please install them via https://pytorch.org/get-started/locally
+
+    ```
+    conda install pytorch==1.11.0 torchvision==0.12.0 torchaudio==0.11.0 cudatoolkit=10.2 -c pytorch -y
+    # conda install pytorch==1.12.0 torchvision==0.13.0 torchaudio==0.12.0 cudatoolkit=10.2 -c pytorch
+    ```
+
+ - Clone this repo:
+
+    ```bash
+    git clone https://github.com/megvii-research/protoclip
+    cd protoclip
+    export PYTHONPATH="$PYTHONPATH:$PWD/src"
+    ```
+    **Note**: If import error is occured later, run `export PYTHONPATH="$PYTHONPATH:$PWD/src"` again.
+
+- Install additional dependencies:
+    ```bash
+    conda install pillow pandas scikit-learn faiss-gpu ftfy tqdm matplotlib pycocotools wandb
+    conda install -c huggingface transformers 
+    conda install -c conda-forge sentence-transformers
+    pip install adapter-transformers
+    # TODO: remove nori dependency
+    pip install nori2
+    ```
+- ELEVATOR dependencies
+
+    ```
+    pip install yacs timm git+https://github.com/haotian-liu/CLIP_vlp.git vision-evaluation
+
+    yacs~=0.1.8
+    scikit-learn
+    timm~=0.4.12
+    numpy~=1.21.0
+    sharedmem
+    git+https://github.com/openai/CLIP.git
+    git+https://github.com/haotian-liu/CLIP_vlp.git
+    torch~=1.7.0
+    PyYAML~=5.4.1
+    Pillow~=9.0.1
+    torchvision~=0.8.0
+    vision-evaluation>=0.2.2
+    vision-datasets>=0.2.0
+    tqdm~=4.62.3
+    transformers~=4.11.3
+    protobuf~=3.20.1
+    ftfy~=6.1.1
+    nltk~=3.7
+    ```
+    
+
+## 2. Prepare Pretraining Data
+This codebase reads a `CSV` file (separated by `\t`) with two columns: a path to an image ("filepath" by default), and a text caption ("title" by default).
+
+| filepath          | title                      |
+|-------------------|----------------------------|
+| path/to/image.jpg | A very typical bus station |
+| ...               | ...                        |
+
+The script `src/utils/gather_cc.py` will collect the [Conceptual Captions](https://github.com/google-research-datasets/conceptual-captions) (CC3M) dataset. First, download the Conceptual Captions URLs from [here](https://ai.google.com/research/ConceptualCaptions/download), then run the following script:
+
+```bash
+python3 src/utils/gather_cc.py path/to/Train_GCC-training.tsv
+```
+
+**Note**: The requirement of CC3M validation data of OpenCLIP is removed in this codebase. The CC3M dataset was made public by Google in 2018. As noted in our paper, the number of accessible images keeps drooping due to expired image links. This issue is raised by several recent works. In this work, since we can only collect 2,643,718 images (concurrent to our work, [CyCLIP](https://arxiv.org/abs/2205.14459) collected 2,631,703 images), we randomly sample a 2,500,000 subset (75\% of full CC3M) from them to train our ProtoCLIP. Considering the dropping accessibility of image links in Conceptual Captions, we call for the use of this dataset size (2.5M) in future benchmarking for better comparability.
+
+**Note**: `webdataset` is no longer supported in this codebase.
 
 
-# Model Architechture
+## 3. Prepare Downstream Data
+- **Zero-shot Classification**. The preprocessed zero-shot datasets can be downloaded from [CLOOB](https://github.com/ml-jku/cloob#downstream-tasks).
 
-## **Image Backbone**
+- **Linear Probing**. We perform linear evaluation on ImageNet, CIFAR10, CIFAR100, and STL10. You need to download the full [ImageNet-1k](https://image-net.org/download.php) dataset manually. The later three datasets are integrated into `torchvision` and will be downloaded automatically.
+
+- **Image-text Retrieval**. We implement zero-shot image-text retrieval on MS-COCO. Since we do not perform fine-tuning, only the validation split (`/val2017`) is required here.
+
+    
+    ```
+    # All downstream datasets shall be stored to <YOUR DATASET ROOT> dictionary:
+    <YOUR DATASET ROOT>
+        ├── imagenet
+        │   ├── train
+        │   └── test  
+        ├── birdsnap
+        │   └── test
+        ├── country211
+        │   └── test
+        ├── flowers102
+        │   └── test
+        ├── gtsrb
+        │   └── test
+        ├── stanford_cars
+        │   └── test
+        ├── ucf101
+        │   ├── testlist01
+        │   ├── testlist02
+        │   └── testlist03   
+        └── coco2017
+           ├── annotations
+           └── val2017 
+    ```
+
+- **STS**
+https://github.com/princeton-nlp/SimCSE#evaluation
+
+- **MS MARCO**
+
+- **wiki sections**
+
+- EVEVATER Image Classification Toolkit
+
+    [EVEVATER Image Classification Toolkit](https://github.com/Computer-Vision-in-the-Wild/Elevater_Toolkit_IC) (Elevater_Toolkit_IC) implemeted standarlized evaluations of vision language models. It covers zero-shot classification, few- / full-shot linear probing, and fully fine tuning on 20 datasets. See paper "*[ELEVATER: A Benchmark and Toolkit for Evaluating Language-Augmented Visual Models](https://arxiv.org/abs/2204.08790), NeurIPS 2022 Datasets and Benchmarks Track*" for more details.
+
+    We have included Elevater_Toolkit_IC in our codebase (in `src/training/evaluations/vision_benchmark`). We have registered new models ([clip_zeroshot_eval.py]((src/training/evaluations/vision_benchmark/models/clip_zeroshot_eval.py)) and [cls_linear_or_ft_eval.py]((src/training/evaluations/vision_benchmark/models/cls_linear_or_ft_eval.py))) following the official instructions. To ensure compatibility, we have made some modifications based on the official Elevater_Toolkit_IC codes at commit `9d39620`, so DO NOT install an Elevater_Toolkit_IC in the environment for this codebase.
+
+    To get started first download all dataset following [this repo](https://github.com/Computer-Vision-in-the-Wild/DataDownload). The downloaded datasets takes about 41Gb storage, and the folder structure should be: 
+
+
+    ```bash
+    .../datasets
+    └── classification
+        ├── caltech_101_20211007
+        │   ├── labels.txt
+        │   ├── test.txt
+        │   ├── test.zip
+        │   ├── train.txt
+        │   └── train.zip
+        ├── cifar100_20200721
+        │   ├── labels.txt
+        │   ├── test_images.txt
+        │   ├── test_images.zip
+        │   ├── train_images.txt
+        │   └── train_images.zip
+        ...
+        └── voc2007_20211007
+            ├── labels.txt
+            ├── test_ic.txt
+            ├── test.zip
+            ├── train_ic.txt
+            ├── train.zip
+            └── val_ic.txt
+
+    21 directories, 115 files
+    ```
+
+
+# Usage
+
+## Training 
+### Model Architechture
+
+#### **Image Backbone**
 
 - **From `OpenCLIP` (v2.0.2)**. [OpenCLIP](https://github.com/mlfoundations/open_clip) is an open source implementation of [OpenAI's CLIP](https://github.com/openai/CLIP) (Contrastive Language-Image Pre-training). To check all supported model architecture and pretrained weigths, run:
 
@@ -103,18 +282,19 @@ A compositional codebase for flexible vision language representation learning.
     --image-model-builder 'torchhub' --image-model 'regnety_16gf' --image-model-tag 'facebookresearch/swag:main' \
     ...
     ```
-
+    
     For more details, see:
     - https://github.com/facebookresearch/swav
     - https://github.com/facebookresearch/dino
     - https://github.com/facebookresearch/vicreg
     - https://github.com/facebookresearch/barlowtwins
+    - https://github.com/facebookresearch/vicregl
     - https://github.com/facebookresearch/SWAG
     - https://github.com/facebookresearch/deit/blob/main/README_deit.md
 
 
 
-## **Text Backbone**
+### **Text Backbone**
 - **From `OpenCLIP`**. Here the alternatives of the text encoder are exactly the same as OpenCLIP's image backbone.
 
 - **From HuggingFace🤗Transformers**. For more details, see [HuggingFace Transformers](https://huggingface.co/docs/transformers). Currently, only 'from pretrained' mode is supported (i.e., you cannot train a huggingface transformer from scratch now). Standard models like BERT/RoBERTa are supported, but whether other models are also supported is not sure...
@@ -146,7 +326,7 @@ A compositional codebase for flexible vision language representation learning.
     | [UniPELT](https://docs.adapterhub.ml/overview.html#unipelt)                                                   | `unipelt`            |          |
 
 
-## **Projection Head**
+### **Projection Head**
 
 - Linear projection head
 
@@ -154,7 +334,7 @@ A compositional codebase for flexible vision language representation learning.
 
 
 
-# Loss Function
+## Loss Function
 
 | Loss        | Original Task | Paper                                                                                            | Source Implementation                                                          | Uni-Directional | Need Prototype Layer |
 |-------------|---------------|--------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------|-----------------|----------------------|
@@ -171,49 +351,12 @@ A compositional codebase for flexible vision language representation learning.
 
 
 
-# Downstream Task
+## Downstream Evaluation
 - Image Classification (ELEVATER?)
 - Image-text Retrieval
 - Sentence Similarity
 - MS MARCO Passage Retrval...
 
-# Evaluation
-
-## EVEVATER Image Classification Toolkit
-
-[EVEVATER Image Classification Toolkit](https://github.com/Computer-Vision-in-the-Wild/Elevater_Toolkit_IC) (Elevater_Toolkit_IC) implemeted standarlized evaluations of vision language models. It covers zero-shot classification, few- / full-shot linear probing, and fully fine tuning on 20 datasets. See paper "*[ELEVATER: A Benchmark and Toolkit for Evaluating Language-Augmented Visual Models](https://arxiv.org/abs/2204.08790), NeurIPS 2022 Datasets and Benchmarks Track*" for more details.
-
-We have included Elevater_Toolkit_IC in our codebase (in `src/training/evaluations/vision_benchmark`). We have registered new models ([clip_zeroshot_eval.py]((src/training/evaluations/vision_benchmark/models/clip_zeroshot_eval.py)) and [cls_linear_or_ft_eval.py]((src/training/evaluations/vision_benchmark/models/cls_linear_or_ft_eval.py))) following the official instructions. To ensure compatibility, we have made some modifications based on the official Elevater_Toolkit_IC codes at commit `9d39620`, so DO NOT install an Elevater_Toolkit_IC in the environment for this codebase.
-
-To get started first download all dataset following [this repo](https://github.com/Computer-Vision-in-the-Wild/DataDownload). The downloaded datasets takes about 41Gb storage, and the folder structure should be: 
-
-
-```bash
-.../datasets
-└── classification
-    ├── caltech_101_20211007
-    │   ├── labels.txt
-    │   ├── test.txt
-    │   ├── test.zip
-    │   ├── train.txt
-    │   └── train.zip
-    ├── cifar100_20200721
-    │   ├── labels.txt
-    │   ├── test_images.txt
-    │   ├── test_images.zip
-    │   ├── train_images.txt
-    │   └── train_images.zip
-    ...
-    └── voc2007_20211007
-        ├── labels.txt
-        ├── test_ic.txt
-        ├── test.zip
-        ├── train_ic.txt
-        ├── train.zip
-        └── val_ic.txt
-
-21 directories, 115 files
-```
 
 Then you can perform EVEVATOR evaluations of the model trained by this codebase, by making necessary modifications and run the following commands:
 
@@ -295,126 +438,4 @@ Input your log dir (end with "../ELEVATER_evaluation/<eval_mode>"):
 20                          Average             35.6797
 saved to logs/U[mobilenet_v3_large-h2]-L[CLIP-from-RN50]-bs1024-YFCC-56ep-lr1e-5/ELEVATER_evaluation/zeroshot/summary.csv
 ```
-
-
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-
-
-# Preparation
-
-## 1. Install Dependencies
-- Create a conda environment and install PyTorch:
-
-    ```bash
-    conda create -n vlkd python=3.8
-    conda activate vlkd
-    ```
-
-    This repo requirs PyTorch (1.11.0) and torchvision. Please install them via https://pytorch.org/get-started/locally
-
-    ```
-    conda install pytorch==1.11.0 torchvision==0.12.0 torchaudio==0.11.0 cudatoolkit=10.2 -c pytorch -y
-    ```
-
-<!-- - Clone this repo:
-
-    ```bash
-    git clone https://github.com/megvii-research/protoclip
-    cd protoclip
-    export PYTHONPATH="$PYTHONPATH:$PWD/src"
-    ```
-    **Note**: If import error is occured later, run `export PYTHONPATH="$PYTHONPATH:$PWD/src"` again. -->
-
-- Install additional dependencies:
-    ```bash
-    conda install pillow pandas scikit-learn faiss-gpu ftfy tqdm matplotlib pycocotools 
-    conda install -c huggingface transformers 
-    conda install -c conda-forge sentence-transformers
-    conda install wandb
-    pip install adapter-transformers
-    # TODO: remove nori dependency
-    pip install nori2
-    ```
-
-    ```
-    ELEVATOR:
-    pip install yacs timm git+https://github.com/haotian-liu/CLIP_vlp.git vision-evaluation
-
-    yacs~=0.1.8
-    scikit-learn
-    timm~=0.4.12
-    numpy~=1.21.0
-    sharedmem
-    git+https://github.com/openai/CLIP.git
-    git+https://github.com/haotian-liu/CLIP_vlp.git
-    torch~=1.7.0
-    PyYAML~=5.4.1
-    Pillow~=9.0.1
-    torchvision~=0.8.0
-    vision-evaluation>=0.2.2
-    vision-datasets>=0.2.0
-    tqdm~=4.62.3
-    transformers~=4.11.3
-    protobuf~=3.20.1
-    ftfy~=6.1.1
-    nltk~=3.7
-
-    ```
-    
-
-## 2. Prepare Pretraining Data
-This codebase reads a `CSV` file (separated by `\t`) with two columns: a path to an image ("filepath" by default), and a text caption ("title" by default).
-
-| filepath          | title                      |
-|-------------------|----------------------------|
-| path/to/image.jpg | A very typical bus station |
-| ...               | ...                        |
-
-The script `src/utils/gather_cc.py` will collect the [Conceptual Captions](https://github.com/google-research-datasets/conceptual-captions) (CC3M) dataset. First, download the Conceptual Captions URLs from [here](https://ai.google.com/research/ConceptualCaptions/download), then run the following script:
-
-```bash
-python3 src/utils/gather_cc.py path/to/Train_GCC-training.tsv
-```
-
-**Note**: The requirement of CC3M validation data of OpenCLIP is removed in this codebase. The CC3M dataset was made public by Google in 2018. As noted in our paper, the number of accessible images keeps drooping due to expired image links. This issue is raised by several recent works. In this work, since we can only collect 2,643,718 images (concurrent to our work, [CyCLIP](https://arxiv.org/abs/2205.14459) collected 2,631,703 images), we randomly sample a 2,500,000 subset (75\% of full CC3M) from them to train our ProtoCLIP. Considering the dropping accessibility of image links in Conceptual Captions, we call for the use of this dataset size (2.5M) in future benchmarking for better comparability.
-
-**Note**: `webdataset` is no longer supported in this codebase.
-
-
-## 3. Prepare Downstream Data
-- **Zero-shot Classification**. The preprocessed zero-shot datasets can be downloaded from [CLOOB](https://github.com/ml-jku/cloob#downstream-tasks).
-
-- **Linear Probing**. We perform linear evaluation on ImageNet, CIFAR10, CIFAR100, and STL10. You need to download the full [ImageNet-1k](https://image-net.org/download.php) dataset manually. The later three datasets are integrated into `torchvision` and will be downloaded automatically.
-
-- **Image-text Retrieval**. We implement zero-shot image-text retrieval on MS-COCO. Since we do not perform fine-tuning, only the validation split (`/val2017`) is required here.
-
-    
-    ```
-    # All downstream datasets shall be stored to <YOUR DATASET ROOT> dictionary:
-    <YOUR DATASET ROOT>
-        ├── imagenet
-        │   ├── train
-        │   └── test  
-        ├── birdsnap
-        │   └── test
-        ├── country211
-        │   └── test
-        ├── flowers102
-        │   └── test
-        ├── gtsrb
-        │   └── test
-        ├── stanford_cars
-        │   └── test
-        ├── ucf101
-        │   ├── testlist01
-        │   ├── testlist02
-        │   └── testlist03   
-        └── coco2017
-           ├── annotations
-           └── val2017 
-    ```
-
-- *STS*
-https://github.com/princeton-nlp/SimCSE#evaluation
-
 

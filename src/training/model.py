@@ -94,6 +94,9 @@ def get_model(args):
         if args.adapter is not None:
             raise RuntimeError(f'Adapter {args.adapter} is not avaliable for {args.text_model_builder} models!')
     
+    else:
+        raise RuntimeError(f'text model builder "{args.text_model_builder}" is not supported.')
+    
     # === image model === #
     if is_master(args):
         logging.info(f'Loading [{args.image_model}] as image model via [{args.image_model_builder}]. Pretrained={args.pretrained_image_model}')
@@ -149,15 +152,21 @@ def get_model(args):
         torch.hub._validate_not_a_forked_repo=lambda a,b,c: True 
 
         image_backbone = torch.hub.load(args.image_model_tag, args.image_model)
-        if 'resnet' in args.image_model:            
-            image_backbone.output_dim = image_backbone.fc.weight.shape[1]
-            image_backbone.fc=torch.nn.Identity()
+        if 'resnet' in args.image_model:
+            if 'vicreg' in args.image_model_tag:
+                image_backbone.output_dim = 2048 # TODO: check ResNet-50 (x2) and ResNet-200 (x2)
             
         if 'vit' in args.image_model or 'xcit' in args.image_model:            
             image_backbone.output_dim = image_backbone.norm.weight.size(0)
 
         if 'regnety' in args.image_model:            
             image_backbone.output_dim = 2048
+
+        image_backbone.to(device=args.device)
+        preprocess_train, preprocess_val = training.transforms.preprocess_train, training.transforms.preprocess_val
+
+    else:
+        raise RuntimeError(f'image model builder "{args.image_model_builder}" is not supported.')
 
                 
     for param in image_backbone.parameters():
@@ -192,9 +201,11 @@ class WrappedModel(nn.Module):
         self.max_seq_length = args.max_seq_length
             
         self.image_context = torch.no_grad if args.lock_image_model else suppress 
-        self.text_context = torch.no_grad if args.lock_text_model and args.adapter is None else suppress
+        self.text_context = torch.no_grad if (args.lock_text_model and args.adapter is None) else suppress
         
         if is_master(args):
+            logging.info(f'Calculate gradients for image backbone?\t{self.image_context==suppress}')
+            logging.info(f'Calculate gradients for text backbone?\t{self.text_context==suppress}')
             logging.info(f'image_context: {str(self.image_context)}')
             logging.info(f'text_context: {str(self.text_context)}')
         
@@ -208,9 +219,10 @@ class WrappedModel(nn.Module):
 
     # image backbone
         self.image_backbone = image_backbone
-        # self.visual = None
         self.image_dim = image_backbone.output_dim
+        self.image_model_tag = args.image_model_tag
 
+    
     # text projection head
         if args.text_head_n_layers > 0 or args.distiller in NEED_PROTOTYPE_LAYER:
             if args.image_head_n_layers==0 and args.joint_projection_dim<0:
@@ -268,6 +280,8 @@ class WrappedModel(nn.Module):
     def encode_image(self, images, projection=False):
         with self.image_context():
             image_features = self.image_backbone(images)
+            if 'vicregl' in self.image_model_tag:
+                image_features = image_features[1]
         if projection:
             image_features = self.image_projection_head(image_features)
         return image_features
@@ -372,7 +386,7 @@ class WrappedModel(nn.Module):
                     # hidden_states = outputs.hidden_states     # (batch_size, sequence_length, hidden_size) x layers (tuple)
 
                 # Pooling
-                use_pooler = True if self.training else False
+                # use_pooler = True if self.training else False # TODO: there is a conflict between retrieval evaluation and sts evaluation...
                 if self.text_pooler=='mean':
                     text_features = mean_pooling(outputs.last_hidden_state, encoded_input['attention_mask'])
 
