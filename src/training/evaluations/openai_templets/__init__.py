@@ -11,6 +11,7 @@ from . import Flowers102
 from . import Food101
 from . import GTSRB
 from . import ImageNet
+from . import ImageNet_CN
 from . import Kinetics700
 from . import KITTI
 from . import MNIST

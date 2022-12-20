@@ -20,7 +20,7 @@ def parse_args():
     # === text model === #  
     parser.add_argument(
         "--text-model-builder",
-        choices=['openclip', 'huggingface', 'sbert'], 
+        choices=['openclip', 'chineseclip', 'huggingface', 'sbert'], 
         help="use which libarary to build the text backbone",
     )  
     parser.add_argument(
@@ -70,7 +70,7 @@ def parse_args():
     )    
     parser.add_argument(
         "--image-model-builder",
-        choices=['openclip', "torchvision", "torchhub"], default='OpenCLIP',
+        choices=['openclip', 'chineseclip', 'torchvision', "torchhub"],
         help="use which libarary to build the image backbone",
     ) 
     parser.add_argument(

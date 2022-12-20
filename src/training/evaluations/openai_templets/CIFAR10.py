@@ -1,14 +1,27 @@
+# classes = [
+#     'airplane',
+#     'automobile',
+#     'bird',
+#     'cat',
+#     'deer',
+#     'dog',
+#     'frog',
+#     'horse',
+#     'ship',
+#     'truck',
+# ]
+
 classes = [
-    'airplane',
-    'automobile',
-    'bird',
-    'cat',
-    'deer',
-    'dog',
-    'frog',
-    'horse',
-    'ship',
-    'truck',
+    '飞机',
+    '轿车',
+    '鸟',
+    '猫',
+    '鹿',
+    '狗',
+    '青蛙',
+    '马',
+    '船',
+    '卡车',
 ]
 
 templates = [

@@ -7,6 +7,7 @@ import numpy as np
 
 import torchvision
 import open_clip
+import cn_clip.clip as cn_clip
 from transformers import AutoConfig, AutoTokenizer, AutoModel
 import transformers.adapters
 from sentence_transformers import SentenceTransformer
@@ -41,10 +42,23 @@ def get_model(args):
         text_backbone = CLIP_model
         tokenizer = open_clip.tokenize
         args.text_width, args.text_dim = text_backbone.text_projection.size()
-        
-        for name, param in text_backbone.named_parameters():
-            param.requires_grad = False if args.lock_text_model else True
+                    
+        if args.adapter is not None:
+            raise RuntimeError(f'Adapter {args.adapter} is not avaliable for {args.text_model_builder} models!')
             
+    elif args.text_model_builder=='chineseclip':
+        CLIP_model, preprocess_val = cn_clip.load_from_name(
+            name=args.text_model, 
+            device=args.device, 
+            download_root=os.path.join(args.cache_dir, 'cn_clip')
+            )
+        preprocess_train = preprocess_val # TODO: add data augmentations
+        
+        CLIP_model.visual = None
+        text_backbone = CLIP_model
+        tokenizer = cn_clip.tokenize
+        args.text_width, args.text_dim = text_backbone.text_projection.size()
+                    
         if args.adapter is not None:
             raise RuntimeError(f'Adapter {args.adapter} is not avaliable for {args.text_model_builder} models!')
     
@@ -56,9 +70,7 @@ def get_model(args):
         text_backbone = AutoModel.from_pretrained(args.text_model, cache_dir=os.path.join(args.cache_dir, 'huggingface'))
         args.text_dim = config.hidden_size
         args.text_width = None
-        for name, param in text_backbone.named_parameters():
-            param.requires_grad = False if args.lock_text_model else True
-        
+                
         if args.adapter is not None:
             if args.adapter=='bottleneck_adapter':
                 config = transformers.adapters.AdapterConfig(mh_adapter=True, output_adapter=True, reduction_factor=16, non_linearity="relu")
@@ -97,6 +109,7 @@ def get_model(args):
     else:
         raise RuntimeError(f'text model builder "{args.text_model_builder}" is not supported.')
     
+    
     # === image model === #
     if is_master(args):
         logging.info(f'Loading [{args.image_model}] as image model via [{args.image_model_builder}]. Pretrained={args.pretrained_image_model}')
@@ -111,6 +124,18 @@ def get_model(args):
             force_quick_gelu=args.force_quick_gelu,
             cache_dir=os.path.join(args.cache_dir, 'open_clip')
         )
+        image_backbone = CLIP_model.visual
+        args.image_dim = image_backbone.output_dim
+
+        
+    elif args.image_model_builder=='chineseclip':
+        CLIP_model, preprocess_val = cn_clip.load_from_name(
+            name=args.text_model, 
+            device=args.device, 
+            download_root=os.path.join(args.cache_dir, 'cn_clip')
+            )
+
+        preprocess_train = preprocess_val # TODO: add data augmentations        
         image_backbone = CLIP_model.visual
         args.image_dim = image_backbone.output_dim
     
@@ -167,9 +192,12 @@ def get_model(args):
 
     else:
         raise RuntimeError(f'image model builder "{args.image_model_builder}" is not supported.')
+   
+    # Set required_grad
+    for name, param in text_backbone.named_parameters():
+        param.requires_grad = False if args.lock_text_model else True
 
-                
-    for param in image_backbone.parameters():
+    for name, param in text_backbone.named_parameters():
         param.requires_grad = False if args.lock_image_model else True
 
     model = WrappedModel(
@@ -284,7 +312,7 @@ class WrappedModel(nn.Module):
                 image_features = image_features[1]
         if projection:
             image_features = self.image_projection_head(image_features)
-        return image_features
+        return image_features.float()
 
     # sentence-transformers API
     def encode(self, sentences, batch_size=32, show_progress_bar=None, convert_to_numpy=True, convert_to_tensor=True, use_pooler=False):
@@ -317,8 +345,8 @@ class WrappedModel(nn.Module):
     
     def encode_text(self, texts, projection=False, use_pooler=True):
         with self.text_context():
-            if self.text_model_builder=='openclip':
-                # TODO: support CoOp-style prompting
+            if self.text_model_builder in ['openclip']:
+                # TODO: support CoOp-style prompting (CoOp for retrieval finetuning?)
                 context_length = (77 - self.n_prompt) if self.prompt is not None else 77
                 texts = self.tokenizer(texts, context_length=context_length).to(self.device)
                 def open_clip_forward(texts):
@@ -336,6 +364,19 @@ class WrappedModel(nn.Module):
                     return x
                 text_features = open_clip_forward(texts)
             
+            elif self.text_model_builder=='chineseclip': 
+                # text_features = self.text_backbone.encode_text(self.tokenizer(texts).to(self.device))
+                # Re-write encode_text() function to avoid reading missing .dtype()
+                # For https://github.com/OFA-Sys/Chinese-CLIP/blob/ce534cc8c0dde1206cd3e3ddf7e4023455c83450/cn_clip/clip/model.py#L375
+                
+                def chineseclip_encode_text(text):
+                    pad_index = self.text_backbone.tokenizer.vocab['[PAD]']
+                    attn_mask = text.ne(pad_index).type(self.text_backbone.text_projection.dtype)
+                    x = self.text_backbone.bert(text, attention_mask=attn_mask)[0].type(self.text_backbone.text_projection.dtype) # [batch_size, seq_length, hidden_size]
+                    return x[:, 0, :] @ self.text_backbone.text_projection
+
+                text_features = chineseclip_encode_text(self.tokenizer(texts).to(self.device)).float()
+
             elif self.text_model_builder=='sbert':            
                 texts = self.text_backbone.tokenize(texts)
                 texts = {

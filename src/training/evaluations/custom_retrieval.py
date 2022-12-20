@@ -36,9 +36,9 @@ def custom_retrieval_evaluation(model, epoch, preprocess, args, recall_k_list=[1
     """
 
     if args.retrieval_frequency == 0:
-        return {}, None, None
+        return {}
     if (epoch % args.retrieval_frequency) != 0 and epoch != args.epochs:
-        return {}, None, None
+        return {}
         
     dataset = CsvDataset(
         input_filename=args.retrieval_data,
@@ -55,9 +55,9 @@ def custom_retrieval_evaluation(model, epoch, preprocess, args, recall_k_list=[1
         positive_texts = np.where(dataset.images==dataset.images[i])
         for positive_text in positive_texts:
             positive_pairs[i, positive_text] = 1
-        # positive_images = np.where(dataset.captions==dataset.captions[i])
-        # for positive_image in positive_images:
-        #     positive_pairs[positive_image, i] = 1
+        positive_images = np.where(dataset.captions==dataset.captions[i])
+        for positive_image in positive_images:
+            positive_pairs[positive_image, i] = 1
 
     positive_pairs = torch.from_numpy(positive_pairs)
 
@@ -98,6 +98,10 @@ def custom_retrieval_evaluation(model, epoch, preprocess, args, recall_k_list=[1
     # concatenate all embeddings
     images_emb = torch.cat(batch_images_emb_list)
     texts_emb = torch.cat(batch_texts_emb_list)
+
+    images_emb = images_emb / images_emb.norm(dim=-1, keepdim=True)
+    texts_emb = texts_emb / texts_emb.norm(dim=-1, keepdim=True)
+        
 
     # get the score for each text and image pair
     scores  = texts_emb @ images_emb.t()

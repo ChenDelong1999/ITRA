@@ -8,6 +8,7 @@ from training.data import ImageNet_nori, ImageNet_50k
 from training.evaluations.openai_templets import *
 
 AVALIABLE_DATASETS = [
+    'ImageNet-CN', 
     'MNIST', 
     'CIFAR10', 
     'CIFAR100', 
@@ -39,7 +40,9 @@ def get_dataset(dataset_name, split, root='/data/Datasets', transform=None):
     
     elif dataset_name=='CIFAR10':
         dataset = torchvision.datasets.CIFAR10(root, train=(split=='train'), transform=transform)
-        dataset.templates = CIFAR10.templates
+        dataset.classes = CIFAR10.classes
+        dataset.templates = ImageNet_CN.templates
+        # dataset.templates = CIFAR10.templates
     
     elif dataset_name=='CIFAR100':
         dataset = torchvision.datasets.CIFAR100(root, train=(split=='train'), transform=transform)
@@ -102,6 +105,12 @@ def get_dataset(dataset_name, split, root='/data/Datasets', transform=None):
         dataset = ImageNet_nori(split=split, transform=transform)
         dataset.templates = ImageNet.templates
         dataset.classes = ImageNet.classes
+        
+    elif dataset_name=='ImageNet-CN':
+        split = 'val' if split=='test' else split
+        dataset = ImageNet_nori(split=split, transform=transform)
+        dataset.templates = ImageNet_CN.templates
+        dataset.classes = ImageNet_CN.classes
     
     elif dataset_name=='ImageNet-50k':
         dataset = ImageNet_50k(transform=transform) if split=='train' else ImageNet_nori(split='val', transform=transform)
@@ -222,11 +231,13 @@ def get_dataset(dataset_name, split, root='/data/Datasets', transform=None):
 
 if __name__=='__main__':
     #for dataset_name in AVALIABLE_DATASETS:
-    for dataset_name in ['EuroSAT']:
+    for dataset_name in ['ImageNet-CN']:
         print('='*64)
         for split in ['test', 'train']:
             dataset = get_dataset(dataset_name, split)
             print(dataset)
             if split=='test':
                 print(dataset.classes)
+                print(len(dataset.classes))
                 print(dataset.templates)
+                print(len(dataset.templates))

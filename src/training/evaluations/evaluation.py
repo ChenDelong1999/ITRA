@@ -22,11 +22,12 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
     if fast_evaluation:
         args.fast_evaluation = True
         linear_eval_datasets = ['ImageNet-50k']
-        zeroshot_datasets = ['ImageNet']
+        zeroshot_datasets = ['CIFAR10', 'ImageNet-CN']
         args.evaluation_workers = 8
     else:
         args.fast_evaluation = False
         zeroshot_datasets= [
+            'ImageNet-CN',
             'ImageNet',
             'birdsnap', 
             'CIFAR10', 
