@@ -8,7 +8,8 @@ import numpy as np
 import torchvision
 import open_clip
 import cn_clip.clip as cn_clip
-from transformers import AutoConfig, AutoTokenizer, AutoModel
+from transformers import AutoConfig, AutoTokenizer, AutoModel, BertForSequenceClassification
+
 import transformers.adapters
 from sentence_transformers import SentenceTransformer
 
@@ -61,13 +62,19 @@ def get_model(args):
                     
         if args.adapter is not None:
             raise RuntimeError(f'Adapter {args.adapter} is not avaliable for {args.text_model_builder} models!')
-    
+        
     elif args.text_model_builder=='huggingface':
         if not args.pretrained_text_model and is_master(args):
             logging.info(f'huggingface-transormer uses pretrained weight by default!')
         config = AutoConfig.from_pretrained(args.text_model, cache_dir=os.path.join(args.cache_dir, 'huggingface'))
         tokenizer = AutoTokenizer.from_pretrained(args.text_model, cache_dir=os.path.join(args.cache_dir, 'huggingface'))
-        text_backbone = AutoModel.from_pretrained(args.text_model, cache_dir=os.path.join(args.cache_dir, 'huggingface'))
+        
+        if 'Taiyi' in args.text_model:
+            # Taiyi models need classification heads, using AutoModel will skip loading them.
+            # See https://huggingface.co/IDEA-CCNL/Taiyi-Roberta-124M-D-v2
+            text_backbone = BertForSequenceClassification.from_pretrained(args.text_model, cache_dir=os.path.join(args.cache_dir, 'huggingface'))
+        else:
+            text_backbone = AutoModel.from_pretrained(args.text_model, cache_dir=os.path.join(args.cache_dir, 'huggingface'))
         args.text_dim = config.hidden_size
         args.text_width = None
                 
@@ -226,6 +233,7 @@ class WrappedModel(nn.Module):
         self.text_width = args.text_dim
         self.tokenizer = tokenizer        
         self.text_model_builder = args.text_model_builder
+        self.image_model_builder = args.image_model_builder
         self.max_seq_length = args.max_seq_length
             
         self.image_context = torch.no_grad if args.lock_image_model else suppress 
@@ -307,6 +315,8 @@ class WrappedModel(nn.Module):
 
     def encode_image(self, images, projection=False):
         with self.image_context():
+            if self.image_model_builder=='chineseclip': 
+                images = images.type(self.image_backbone.conv1.weight.dtype)
             image_features = self.image_backbone(images)
             if 'vicregl' in self.image_model_tag:
                 image_features = image_features[1]
@@ -457,6 +467,9 @@ class WrappedModel(nn.Module):
                         delta = self.text_backbone(**encoded_input_delta, position_ids=delta_position_ids.to(self.device), output_hidden_states=True, return_dict=True)
                         delta = delta.last_hidden_state[encoded_input_delta['input_ids'] == self.tokenizer.mask_token_id]
                     text_features -= delta
+                
+                elif self.text_pooler == 'logits':
+                    text_features = outputs.logits
                     
 
         if projection:

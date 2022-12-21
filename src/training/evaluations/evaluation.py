@@ -116,16 +116,16 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
         if args.wandb:
             wandb.log({f"eval_retrieval/{name}": val, 'epoch': epoch})
             
-    # # MS-COCO retrieval
-    # metrics = {}
-    # retrieval_metrics, all_image_features, all_text_features= coco_retrieval_evaluation(model, epoch, preprocess, args)
-    # metrics.update(retrieval_metrics)
-    # all_metrics.update(retrieval_metrics)
-    # for name, val in metrics.items():
-    #     if tb_writer is not None:
-    #         tb_writer.add_scalar(f"eval_retrieval/{name}", val, epoch)
-    #     if args.wandb:
-    #         wandb.log({f"eval_retrieval/{name}": val, 'epoch': epoch})
+    # MS-COCO retrieval
+    metrics = {}
+    retrieval_metrics, all_image_features, all_text_features= coco_retrieval_evaluation(model, epoch, preprocess, args)
+    metrics.update(retrieval_metrics)
+    all_metrics.update(retrieval_metrics)
+    for name, val in metrics.items():
+        if tb_writer is not None:
+            tb_writer.add_scalar(f"eval_retrieval/{name}", val, epoch)
+        if args.wandb:
+            wandb.log({f"eval_retrieval/{name}": val, 'epoch': epoch})
 
     
     # Analyse COCO features

@@ -161,17 +161,20 @@ def get_retrieval_metrics(scores_img2text, scores_text2img, gt_img2text, gt_text
     r_mean = (tr_mean + ir_mean) / 2
 
     eval_result =  {
-        'image2text-R@1': img2text_recall_at_1,
-        'image2text-R@5': img2text_recall_at_5,
-        'image2text-R@10': img2text_recall_at_10,
+        'coco-image2text-R@1': img2text_recall_at_1,
+        'coco-image2text-R@5': img2text_recall_at_5,
+        'coco-image2text-R@10': img2text_recall_at_10,
         #'image2text-R-mean': tr_mean,
-        'text2image-R@1': text2img_recall_at_1,
-        'text2image-R@5': text2img_recall_at_5,
-        'text2image-R@10': text2img_recall_at_10,
+        'coco-text2image-R@1': text2img_recall_at_1,
+        'coco-text2image-R@5': text2img_recall_at_5,
+        'coco-text2image-R@10': text2img_recall_at_10,
         #'text2image-R-mean': ir_mean,
-        'mean-recall': r_mean
+        'coco-mean-recall': r_mean
         }
     
     for key, item in eval_result.items():
-        eval_result[key] = float(item)
+        eval_result[key] = round(float(item), 2)
+    
+    print(eval_result)
+
     return eval_result

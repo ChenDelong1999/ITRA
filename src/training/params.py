@@ -179,6 +179,12 @@ def parse_args():
         default="title",
         help="For csv-like datasets, the name of the key for the captions."
     )
+    
+    parser.add_argument(
+        "--images-dir",
+        type=str,
+        default="",
+    )
     parser.add_argument(
         "--workers", type=int, default=8, help="Number of workers per GPU."
     )
