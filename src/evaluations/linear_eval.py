@@ -5,7 +5,7 @@ import torch.nn as nn
 import numpy as np
 from sklearn.linear_model import LogisticRegression as sklearnLogisticRegression
 from torch.utils.data import DataLoader
-from training.evaluations.downstream_datasets import get_dataset
+from evaluations.downstream_datasets import get_dataset
 from tqdm import tqdm
 import logging
 

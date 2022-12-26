@@ -5,7 +5,7 @@ import random
 import glob
 import torchvision.datasets
 from training.data import ImageNet_nori, ImageNet_50k
-from training.evaluations.openai_templets import *
+from evaluations.openai_templets import *
 
 AVALIABLE_DATASETS = [
     'ImageNet-CN', 

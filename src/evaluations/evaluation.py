@@ -5,7 +5,7 @@ from training.distributed import is_master
 from .linear_eval import linear_eval
 from .zero_shot import zero_shot_eval
 from .coco_retrieval import coco_retrieval_evaluation
-from .custom_retrieval import custom_retrieval_evaluation
+from .retrieval import retrieval_evaluation
 from .analyze_features import analyze_features
 #from .sts_evaluation import sts_benchmark
 from .nlp_evaluations import nlp_eval
@@ -105,20 +105,9 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
         if args.wandb:
             wandb.log({f"eval_zero_shot/{name}": val, 'epoch': epoch})
         
-    # Custum retrieval
+    # Zero-shot retrieval
     metrics = {}
-    retrieval_metrics = custom_retrieval_evaluation(model, epoch, preprocess, args)
-    metrics.update(retrieval_metrics)
-    all_metrics.update(retrieval_metrics)
-    for name, val in metrics.items():
-        if tb_writer is not None:
-            tb_writer.add_scalar(f"eval_retrieval/{name}", val, epoch)
-        if args.wandb:
-            wandb.log({f"eval_retrieval/{name}": val, 'epoch': epoch})
-            
-    # MS-COCO retrieval
-    metrics = {}
-    retrieval_metrics, all_image_features, all_text_features= coco_retrieval_evaluation(model, epoch, preprocess, args)
+    retrieval_metrics = retrieval_evaluation(model, epoch, preprocess, args)
     metrics.update(retrieval_metrics)
     all_metrics.update(retrieval_metrics)
     for name, val in metrics.items():
@@ -127,16 +116,27 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
         if args.wandb:
             wandb.log({f"eval_retrieval/{name}": val, 'epoch': epoch})
 
+    # # MS-COCO retrieval
+    # metrics = {}
+    # retrieval_metrics, all_image_features, all_text_features= coco_retrieval_evaluation(model, epoch, preprocess, args)
+    # metrics.update(retrieval_metrics)
+    # all_metrics.update(retrieval_metrics)
+    # for name, val in metrics.items():
+    #     if tb_writer is not None:
+    #         tb_writer.add_scalar(f"eval_retrieval/{name}", val, epoch)
+    #     if args.wandb:
+    #         wandb.log({f"eval_retrieval/{name}": val, 'epoch': epoch})
+
     
-    # Analyse COCO features
-    if not fast_evaluation:
-        feature_metrics = analyze_features(all_image_features, all_text_features, args)
-        all_metrics.update(feature_metrics)
-        for name, val in feature_metrics.items():
-            if tb_writer is not None:
-                tb_writer.add_scalar(f"eval_analyze_features/{name}", val, epoch)
-            if args.wandb:
-                wandb.log({f"eval_analyze_features/{name}": val, 'epoch': epoch})
+    # # Analyse COCO features
+    # if not fast_evaluation:
+    #     feature_metrics = analyze_features(all_image_features, all_text_features, args)
+    #     all_metrics.update(feature_metrics)
+    #     for name, val in feature_metrics.items():
+    #         if tb_writer is not None:
+    #             tb_writer.add_scalar(f"eval_analyze_features/{name}", val, epoch)
+    #         if args.wandb:
+    #             wandb.log({f"eval_analyze_features/{name}": val, 'epoch': epoch})
 
     # linear evaluation
     metrics = {}

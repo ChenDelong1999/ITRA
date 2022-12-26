@@ -17,32 +17,32 @@ UNI_DIRECTIONAL = ['CompRess-1q', 'SEED', 'DINO', 'ProtoCPC']
 NEED_PROTOTYPE_LAYER = ['DINO', 'ProtoCPC', 'ProtoRKD']
 
 
-def get_distiller(args):
-    if args.distiller=='SimReg':
+def get_loss(args):
+    if args.loss=='SimReg':
         return SimReg
-    elif args.distiller=='SimReg-L1':
+    elif args.loss=='SimReg-L1':
         return SimRegL1
-    elif args.distiller=='SimReg-SmoothL1':
+    elif args.loss=='SimReg-SmoothL1':
         return SimRegSmoothL1
-    elif args.distiller=='VICReg':
+    elif args.loss=='VICReg':
         return VICReg
-    elif args.distiller=='BarlowTwins':
+    elif args.loss=='BarlowTwins':
         return BarlowTwins
-    elif args.distiller=='RKD':
+    elif args.loss=='RKD':
         return RKD
-    elif args.distiller=='CompRess-2q':
+    elif args.loss=='CompRess-2q':
         return CompReSS
-    elif args.distiller=='CompRess-1q':
+    elif args.loss=='CompRess-1q':
         return CompReSSA
-    elif args.distiller=='SEED':
+    elif args.loss=='SEED':
         return SEED
-    elif args.distiller=='InfoNCE':
+    elif args.loss=='InfoNCE':
         return CLIPLoss
-    elif args.distiller=='DINO':
+    elif args.loss=='DINO':
         return DINOLoss
-    elif args.distiller=='ProtoCPC':
+    elif args.loss=='ProtoCPC':
         return protocpc_loss
-    elif args.distiller=='ProtoRKD':
+    elif args.loss=='ProtoRKD':
         return ProtoRKDLoss
 
 

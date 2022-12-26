@@ -3,7 +3,7 @@ import sys
 import os
 import numpy as np
 import pandas as pd
-from training.evaluations.downstream_datasets import get_dataset
+from evaluations.downstream_datasets import get_dataset
 
 
 class CaptionedImageNet():

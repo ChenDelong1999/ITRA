@@ -53,6 +53,8 @@ class CsvDataset(Dataset):
         logging.debug(f'Loading csv data from {input_filename}.')
         if input_filename[:2]=='s3':
             df = pd.read_csv(smart_open(input_filename, "r"), sep=sep)
+        elif 'rsicd' in input_filename:
+            df = pd.read_csv(input_filename, sep=sep, encoding='gb18030')
         else:
             df = pd.read_csv(input_filename, sep=sep)
         

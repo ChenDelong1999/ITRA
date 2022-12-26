@@ -17,9 +17,9 @@ except ImportError:
 
 from utils.training_utils import AverageMeter, Cacher
 from .distributed import is_master, gather_features, get_gathered_item
-from distiller import NEED_LOGIT_SCALE, NEED_GATHER, NEED_PROTOTYPE_LAYER
+from loss import NEED_LOGIT_SCALE, NEED_GATHER, NEED_PROTOTYPE_LAYER
 
-from distiller import CLIPLoss
+from loss import CLIPLoss
 
 def train_one_epoch(
     model, 
@@ -28,7 +28,7 @@ def train_one_epoch(
     optimizer, 
     scaler, 
     scheduler,  
-    distiller, 
+    loss, 
     args, 
     writer 
     ):
@@ -87,7 +87,7 @@ def train_one_epoch(
         with autocast():
             with forward_context():
 
-                if args.distiller in NEED_PROTOTYPE_LAYER:
+                if args.loss in NEED_PROTOTYPE_LAYER:
                     if args.teacher=='text':
                         w = model_without_ddp.image_projection_head.last_layer.weight_v.data.clone()
                         model_without_ddp.text_projection_head.last_layer.weight_v.data.copy_(w)
@@ -101,7 +101,7 @@ def train_one_epoch(
                     text_features_2 = model_without_ddp.encode_text(texts, projection=True)
                     
                 # gather features
-                if args.distributed and args.distiller in NEED_GATHER:
+                if args.distributed and args.loss in NEED_GATHER:
                     all_image_features, all_text_features = gather_features(
                         image_features, text_features,
                         args.local_loss, args.gather_with_grad, 
@@ -128,10 +128,10 @@ def train_one_epoch(
                 elif args.teacher=='image':
                     teacher_features, student_features = all_image_features, all_text_features
                 
-                if args.distiller in NEED_LOGIT_SCALE:
-                    distill_loss = distiller(teacher_features, student_features, logit_scale=logit_scale)
+                if args.loss in NEED_LOGIT_SCALE:
+                    distill_loss = loss(teacher_features, student_features, logit_scale=logit_scale)
                 else:
-                    distill_loss = distiller(teacher_features, student_features)            
+                    distill_loss = loss(teacher_features, student_features)            
                 total_loss = args.w_distill * distill_loss + ssl_loss
         
         if args.cache_teacher is not None:

@@ -18,7 +18,7 @@ from training.projection import DINOHead
 from training.prompt import Prompt
 import training.transforms
 
-from distiller import NEED_LOGIT_SCALE, NEED_PROTOTYPE_LAYER
+from loss import NEED_LOGIT_SCALE, NEED_PROTOTYPE_LAYER
 from contextlib import suppress
 
 
@@ -242,8 +242,6 @@ class WrappedModel(nn.Module):
         if is_master(args):
             logging.info(f'Calculate gradients for image backbone?\t{self.image_context==suppress}')
             logging.info(f'Calculate gradients for text backbone?\t{self.text_context==suppress}')
-            logging.info(f'image_context: {str(self.image_context)}')
-            logging.info(f'text_context: {str(self.text_context)}')
         
         # TODO: CoOp text prompt (optional) 
         if args.prompt:
@@ -260,16 +258,16 @@ class WrappedModel(nn.Module):
 
     
     # text projection head
-        if args.text_head_n_layers > 0 or args.distiller in NEED_PROTOTYPE_LAYER:
+        if args.text_head_n_layers > 0 or args.loss in NEED_PROTOTYPE_LAYER:
             if args.image_head_n_layers==0 and args.joint_projection_dim<0:
                 args.joint_projection_dim = self.image_dim # adaption layer
             self.text_projection_head = DINOHead(
                 in_dim=self.text_dim, out_dim=65536, bottleneck_dim=args.joint_projection_dim,
-                nlayers=args.text_head_n_layers, skip_last_layer=args.distiller not in NEED_PROTOTYPE_LAYER
+                nlayers=args.text_head_n_layers, skip_last_layer=args.loss not in NEED_PROTOTYPE_LAYER
                 ).to(args.device)
             
             # DINO & ProtoCPC copy student's learnable prototype to teacher, so teacher's prototype should not be optimized
-            if args.distiller in NEED_PROTOTYPE_LAYER and args.teacher=='text':
+            if args.loss in NEED_PROTOTYPE_LAYER and args.teacher=='text':
                 for param in self.text_projection_head.parameters():
                     param.requires_grad = False
         else:
@@ -279,15 +277,15 @@ class WrappedModel(nn.Module):
             args.joint_projection_dim = self.text_dim
 
     # image projection head
-        if args.image_head_n_layers > 0 or args.distiller in NEED_PROTOTYPE_LAYER:
+        if args.image_head_n_layers > 0 or args.loss in NEED_PROTOTYPE_LAYER:
             if args.text_head_n_layers==0 and args.joint_projection_dim<0:
                 args.joint_projection_dim = self.text_dim # adaption layer
             self.image_projection_head = DINOHead(
                 in_dim=self.image_dim, out_dim=65536, bottleneck_dim=args.joint_projection_dim,
-                nlayers=args.image_head_n_layers, skip_last_layer=args.distiller not in NEED_PROTOTYPE_LAYER
+                nlayers=args.image_head_n_layers, skip_last_layer=args.loss not in NEED_PROTOTYPE_LAYER
                 ).to(args.device)
             # FIXME? # DINO & ProtoCPC copy student's learnable prototype to teacher, so teacher's prototype should not be optimized
-            if args.distiller in NEED_PROTOTYPE_LAYER and args.teacher=='image':
+            if args.loss in NEED_PROTOTYPE_LAYER and args.teacher=='image':
                 for param in self.image_projection_head.parameters():
                     param.requires_grad = False
         else:
@@ -296,7 +294,7 @@ class WrappedModel(nn.Module):
                 logging.info('Image backbone do not append projection head so set args.joint_projection_dim = self.image_dim')
             args.joint_projection_dim = self.image_dim
 
-        if args.distiller in NEED_LOGIT_SCALE:
+        if args.loss in NEED_LOGIT_SCALE:
             if hasattr(self.text_backbone, 'logit_scale'):
                 self.logit_scale = self.text_backbone.logit_scale 
                 self.text_backbone.logit_scale = None

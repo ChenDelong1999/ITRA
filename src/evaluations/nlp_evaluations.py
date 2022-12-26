@@ -13,7 +13,7 @@ from zipfile import ZipFile
 from .openai_templets.ImageNet import templates as ImageNet_templates
 from tqdm import tqdm
 from torch.utils.data import DataLoader
-from training.evaluations.linear_eval import get_linear_eval_acc
+from evaluations.linear_eval import get_linear_eval_acc
 
 from sentence_transformers import  LoggingHandler, SentenceTransformer, evaluation, util, models
 import logging
@@ -24,7 +24,7 @@ from scipy.stats import pearsonr, spearmanr
 from utils.captioned_imagenet import CaptionedImageNet
 # from senteval import engine
 
-PATH_TO_SENTEVAL = 'src/training/evaluations/SentEval'
+PATH_TO_SENTEVAL = 'src/evaluations/SentEval'
 sys.path.insert(0, PATH_TO_SENTEVAL)
 import senteval
 

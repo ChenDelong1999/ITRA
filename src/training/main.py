@@ -34,9 +34,10 @@ from training.logger import setup_logging
 from training.params import parse_args
 from training.scheduler import cosine_lr
 from training.train import train_one_epoch
-from training.evaluations.evaluation import evaluate
 
-from distiller import get_distiller, NEED_LOGIT_SCALE
+from evaluations.evaluation import evaluate
+
+from loss import get_loss, NEED_LOGIT_SCALE
 
 # to disable warning "huggingface/tokenizers: 
 # ("The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...")
@@ -131,7 +132,7 @@ def main():
         logging.info(f'Running with a single process. Device {args.device}.')
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    # Build teacher, student and distiller
+    # Build teacher, student and loss
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 
     # Set barriers to avoid multiple downloads of pretrained weights
@@ -164,9 +165,9 @@ def main():
             **ddp_args, 
         )
 
-    distiller = get_distiller(args)(args, args.joint_projection_dim).to(args.device)
+    loss = get_loss(args)(args, args.joint_projection_dim).to(args.device)
     if is_master(args):
-        logging.info(f'Created [{args.distiller}] distiller: '+str(distiller))
+        logging.info(f'Created [{args.loss}] loss: '+str(loss))
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # initialize datasets
@@ -286,7 +287,7 @@ def main():
     
     if args.restart:
         start_epoch = 0
-        # if args.distiller in NEED_LOGIT_SCALE:
+        # if args.loss in NEED_LOGIT_SCALE:
         #     model.module.reinit_logit_scale(args.logit_scale) if args.distributed else model.reinit_logit_scale(args.logit_scale)
         #     logging.info(f'logict scale re-initialized to {args.logit_scale}')
         
@@ -356,7 +357,7 @@ def main():
             optimizer=optimizer, 
             scaler=scaler, 
             scheduler=scheduler,  
-            distiller=distiller, 
+            loss=loss, 
             args=args, 
             writer=writer 
             )

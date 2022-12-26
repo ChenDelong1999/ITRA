@@ -13,7 +13,7 @@ from torchvision.datasets import CIFAR10, CIFAR100, STL10
 from sklearn.metrics.cluster import adjusted_rand_score
 from sklearn.metrics import adjusted_mutual_info_score
 from training.data import ImageNet_nori
-from training.evaluations.downstream_datasets import get_dataset
+from evaluations.downstream_datasets import get_dataset
 from sklearn.metrics import confusion_matrix
 
 def zero_shot_classifier(model, classnames, templates, args):

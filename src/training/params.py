@@ -99,7 +99,7 @@ def parse_args():
     parser.add_argument("--dino-teacher-temp", type=float, default=0.04, help="")
 
     parser.add_argument(
-        "--distiller",
+        "--loss",
         type=str,
         default='SimReg',
         help="SimReg, RKD, CompRess, CompRess-1q, InfoNCE, etc.",
