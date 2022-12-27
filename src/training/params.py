@@ -41,10 +41,6 @@ def parse_args():
         # TODO: support build model from scratch for huggingface transformer
     )
     parser.add_argument(
-        "--lock-text-model", action="store_true", default=False,
-        help="whether include text backbone parameters in the optimizer",
-    )
-    parser.add_argument(
         "--text-head-n-layers", type=int, default=0,
         help="how many MLP layers for text projection head",
     )
@@ -59,7 +55,14 @@ def parse_args():
         "--adapter", type=str, default=None,
         help="Path to csv filewith training data",
     )
-    
+    parser.add_argument(
+        "--lock-text-model", action="store_true", default=False,
+        help="whether include text backbone parameters in the optimizer",
+    )
+    parser.add_argument(
+        "--lock-text-partial", type=str, default='',
+        help="list keywords of params names that you want to lock in the text model, seperate by ','. Add '!' at first to do reverse manipulation (partial unfreeze)",
+    )
     # === image model === #
     parser.add_argument(
         "--image-model", default='', type=str,
@@ -78,10 +81,6 @@ def parse_args():
         help="whether load pretrained weigth for the image backbone"
     )
     parser.add_argument(
-        "--lock-image-model", action="store_true", default=False,
-        help="train image?",
-    )
-    parser.add_argument(
         "--image-head-n-layers", type=int, default=0,
         help="how many MLP layers for image projection head",
     )
@@ -89,7 +88,14 @@ def parse_args():
         "--joint-projection-dim", type=int, default=-1,
         help="dimension of projected representations",
     )
-
+    parser.add_argument(
+        "--lock-image-model", action="store_true", default=False,
+        help="train image?",
+    )
+    parser.add_argument(
+        "--lock-image-partial", type=str, default='',
+        help="list keywords of params names that you want to lock in the image model, seperate by ','. Add '!' at first to do reverse manipulation (partial unfreeze)",
+    )
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Knowledge Distillation Configurations
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -154,6 +160,12 @@ def parse_args():
         type=str,
         default=None,
         help="Path to datasets for evaluation",
+    )
+    parser.add_argument(
+        "--eval-with-wise-ft",
+        type=float,
+        default=1,
+        help="",
     )
     parser.add_argument(
         "--dataset-size",

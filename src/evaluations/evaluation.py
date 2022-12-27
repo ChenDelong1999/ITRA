@@ -9,6 +9,7 @@ from .retrieval import retrieval_evaluation
 from .analyze_features import analyze_features
 #from .sts_evaluation import sts_benchmark
 from .nlp_evaluations import nlp_eval
+from .wise_ft import get_wise_ft_model
 try:
     import wandb
 except ImportError:
@@ -18,6 +19,11 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
     if args.distributed and not is_master(args):
         return
     logging.info( f"Starting evaluation of [{args.name}] at epoch {epoch}")
+
+
+    if args.eval_with_wise_ft !=1:
+        logging.info( f"Perform Wise-FT evaluation with alpha={args.eval_with_wise_ft}")
+        model = get_wise_ft_model(model, args, alpha=args.eval_with_wise_ft)
 
     if fast_evaluation:
         args.fast_evaluation = True

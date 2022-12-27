@@ -200,12 +200,36 @@ def get_model(args):
     else:
         raise RuntimeError(f'image model builder "{args.image_model_builder}" is not supported.')
    
-    # Set required_grad
+    # Set 'param.required_grad'
     for name, param in text_backbone.named_parameters():
         param.requires_grad = False if args.lock_text_model else True
-
-    for name, param in text_backbone.named_parameters():
+        if args.lock_text_partial != '':
+            for keyword in args.lock_text_partial.split(','):
+                if keyword.replace('!', '') in name:
+                    if '!' in keyword:
+                        # logging.info(f'unfreezing: {name}')
+                        param.requires_grad = True
+                        if args.lock_text_model:
+                            break
+                    else:
+                        # logging.info(f'freezing: {name}')
+                        param.requires_grad = False
+                        if not args.lock_text_model:
+                            break
+                    
+    for name, param in image_backbone.named_parameters():
         param.requires_grad = False if args.lock_image_model else True
+        if args.lock_image_partial != '':
+            for keyword in args.lock_image_partial.split(','):
+                if keyword.replace('!', '') in name:
+                    if '!' in keyword:
+                        param.requires_grad = True
+                        if args.lock_image_model:
+                            break
+                    else:
+                        param.requires_grad = False
+                        if not args.lock_image_model:
+                            break
 
     model = WrappedModel(
         text_backbone=text_backbone, 
@@ -236,8 +260,8 @@ class WrappedModel(nn.Module):
         self.image_model_builder = args.image_model_builder
         self.max_seq_length = args.max_seq_length
             
-        self.image_context = torch.no_grad if args.lock_image_model else suppress 
-        self.text_context = torch.no_grad if (args.lock_text_model and args.adapter is None) else suppress
+        self.image_context = torch.no_grad if (args.lock_image_model and '!' not in args.lock_image_partial) else suppress 
+        self.text_context = torch.no_grad if (args.lock_text_model and '!' not in args.lock_text_partial and args.adapter is None) else suppress
         
         if is_master(args):
             logging.info(f'Calculate gradients for image backbone?\t{self.image_context==suppress}')

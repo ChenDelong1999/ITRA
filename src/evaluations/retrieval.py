@@ -113,7 +113,13 @@ def retrieval_evaluation(model, epoch, preprocess, args, recall_k_list=[1,5,10])
         return {}
 
     
-    if args.retrieval_data=='mscoco_captions':
+    if args.retrieval_data=='mscoco_captions_2014':
+        from torchvision.datasets.coco import CocoCaptions
+        coco_val_root = os.path.join(args.eval_data_dir, 'coco2014/val2014')
+        coco_val_json = os.path.join(args.eval_data_dir, 'coco2014/annotations/captions_val2014.json')
+        dataset = CocoCaptions(root=coco_val_root, annFile=coco_val_json, transform=preprocess)
+        
+    elif args.retrieval_data=='mscoco_captions':
         from torchvision.datasets.coco import CocoCaptions
         coco_val_root = os.path.join(args.eval_data_dir, 'coco2017/val2017')
         coco_val_json = os.path.join(args.eval_data_dir, 'coco2017/annotations/captions_val2017.json')

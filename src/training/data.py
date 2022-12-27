@@ -28,25 +28,34 @@ except ImportError:
 
 from torchvision.datasets.coco import CocoCaptions
 import os
+import random
 
 class COCOCaptionsDataset(Dataset):
-    def __init__(self, transforms, args) -> None:
+    def __init__(self, transforms, args, index_mapping=None):
         
-        coco_train_root = os.path.join(args.eval_data_dir, 'coco2017/train2017')
-        coco_train_json = os.path.join(args.eval_data_dir, 'coco2017/annotations/captions_train2017.json')
-        self.coco_dataset = CocoCaptions(root=coco_train_root, annFile=coco_train_json, transform=transforms)
-
+        if args.train_data=='mscoco_captions_2014':
+            coco_train_root = os.path.join(args.eval_data_dir, 'coco2014/train2014')
+            coco_train_json = os.path.join(args.eval_data_dir, 'coco2014/annotations/captions_train2014.json')
+            self.coco_dataset = CocoCaptions(root=coco_train_root, annFile=coco_train_json, transform=transforms)
+            
+        elif args.train_data=='mscoco_captions':
+            coco_train_root = os.path.join(args.eval_data_dir, 'coco2017/train2017')
+            coco_train_json = os.path.join(args.eval_data_dir, 'coco2017/annotations/captions_train2017.json')
+            self.coco_dataset = CocoCaptions(root=coco_train_root, annFile=coco_train_json, transform=transforms)
+        
+        if index_mapping is None:
+            self.index_mapping=torch.arange(len(self.coco_dataset))
+        else:
+            self.index_mapping = index_mapping
+        
     def __len__(self):
-        return len(self.coco_dataset)
+        return len(self.index_mapping)
 
-    def __getitem__(self, index):
-
+    def __getitem__(self, episodic_index):
+        index = self.index_mapping[episodic_index]
         img, captions = self.coco_dataset[index]
-
-        return index, img, captions[0]
-
-    
-
+        return episodic_index, img, captions[random.randint(0,4)]
+  
 
 class CsvDataset(Dataset):
     def __init__(self, input_filename, transforms, img_key, caption_key, aug=None, sep="\t", dataset_size=None, index_mapping=None, skip_image=False, nori_dataset=False, images_dir=''):
@@ -219,8 +228,8 @@ class DataInfo:
 def get_csv_dataset(args, preprocess_fn, aug, is_train, index_mapping):
     input_filename = args.train_data if is_train else args.val_data
     assert input_filename
-    if input_filename=='coco':
-        dataset = COCOCaptionsDataset(transforms=preprocess_fn, args=args)
+    if input_filename=='mscoco_captions':
+        dataset = COCOCaptionsDataset(transforms=preprocess_fn, args=args, index_mapping=index_mapping)
     else:
         dataset = CsvDataset(
             input_filename,
@@ -244,7 +253,7 @@ def get_csv_dataset(args, preprocess_fn, aug, is_train, index_mapping):
         batch_size=args.batch_size,
         shuffle=shuffle,
         num_workers=args.workers,
-        pin_memory=True,
+        pin_memory=False,
         sampler=sampler,
         drop_last=False,
         persistent_workers=args.workers>0

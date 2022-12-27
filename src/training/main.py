@@ -191,7 +191,7 @@ def main():
             logging.info(f'\tdataset n_sample: \t{len(data["train"].dataset)}')
             logging.info(f'\tdataloader n_step: \t{len(data["train"].dataloader)}')
         if args.dataset_size is None:
-            args.dataset_size = len(data['train'].dataset.captions) if args.train_data !='coco' else len(data['train'].dataset)
+            args.dataset_size = len(data['train'].dataset.captions) if args.train_data !='mscoco_captions' else len(data['train'].dataset)
     if not args.episodic_training:
         args.episode_size = args.dataset_size
 
