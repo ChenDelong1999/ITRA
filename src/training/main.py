@@ -22,11 +22,6 @@ try:
 except ImportError:
     tensorboard = None
 
-try:
-    import horovod.torch as hvd
-except ImportError:
-    hvd = None
-
 from training.model import get_model
 from training.data import get_data
 from training.distributed import is_master, init_distributed_device, world_info_from_env
@@ -34,6 +29,7 @@ from training.logger import setup_logging
 from training.params import parse_args
 from training.scheduler import cosine_lr
 from training.train import train_one_epoch
+from training.optimization import create_optimizer, get_parameter_groups, LayerDecayValueAssigner
 
 from evaluations.evaluation import evaluate
 
@@ -198,14 +194,51 @@ def main():
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # create optimizer and scaler
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    
     optimizer = None
     scaler = None
     if args.train_data:
-        exclude = lambda n, p: p.ndim < 2 or "bn" in n or "ln" in n or "bias" in n or 'logit_scale' in n
-        include = lambda n, p: not exclude(n, p)
+        model_without_ddp = model.module if args.distributed else model
+        num_layers_image = model_without_ddp.image_backbone.layers
+        num_layers_text = model_without_ddp.text_backbone.layers
+        if is_master(args):
+            logging.info(f'Image backbone has {num_layers_image} layers')
+            logging.info(f'Text backbone has {num_layers_text} layers')
+
+        if args.layer_decay_image < 1.0:
+            decay = list(args.backbone_decay * args.layer_decay_image ** (num_layers_image + 1 - i) for i in range(num_layers_image + 2))
+            decay[-1] /= args.backbone_decay
+            assigner_image = LayerDecayValueAssigner(decay)
+        else:
+            assigner_image = None
+            
+        if args.layer_decay_text < 1.0:
+            decay = list(args.backbone_decay * args.layer_decay_text ** (num_layers_text + 1 - i) for i in range(num_layers_text + 2))
+            decay[-1] /= args.backbone_decay
+            assigner_text = LayerDecayValueAssigner(decay)
+        else:
+            assigner_text = None
+
+        # TODO
+        # skip_weight_decay_list = model.no_weight_decay()
+        skip_weight_decay_list = {'positional_embedding', 'class_embedding', 'logit_scale', 'bn', 'ln', 'bias'}
+        
+        # TODO
+        # args.disable_weight_decay_on_rel_pos_bias = False 
+        # if args.disable_weight_decay_on_rel_pos_bias:
+        #     for i in range(num_layers):
+        #         skip_weight_decay_list.add("blocks.%d.attn.relative_position_bias_table" % i)
+
+        optimizer = create_optimizer(
+                args, model_without_ddp, skip_list=skip_weight_decay_list,
+                get_num_layer_image=assigner_image.get_layer_id if assigner_image is not None else None, 
+                get_num_layer_text=assigner_text.get_layer_id if assigner_text is not None else None, 
+                get_layer_scale_image=assigner_image.get_scale if assigner_image is not None else None,
+                get_layer_scale_text=assigner_text.get_scale if assigner_text is not None else None,
+                )
+
 
         named_parameters = list(model.named_parameters())
-        
         if is_master(args):
             logging.info(f"Prameters to be optimized:")
             n_trainable_params = 0
@@ -220,22 +253,21 @@ def main():
                     logging.info(f'\t{n}\t{list(p.size())}')
                     n_frozen_params += p.numel()
                         
-        gain_or_bias_params = [p for n, p in named_parameters if exclude(n, p) and p.requires_grad]
-        rest_params = [p for n, p in named_parameters if include(n, p) and p.requires_grad]
+        # Original OpenCLIP optimizer implementation
+        # exclude = lambda n, p: p.ndim < 2 or "bn" in n or "ln" in n or "bias" in n or 'logit_scale' in n
+        # include = lambda n, p: not exclude(n, p)
+        # gain_or_bias_params = [p for n, p in named_parameters if exclude(n, p) and p.requires_grad]
+        # rest_params = [p for n, p in named_parameters if include(n, p) and p.requires_grad]
 
-        optimizer = optim.AdamW(
-            [
-                {"params": gain_or_bias_params, "weight_decay": 0.},
-                {"params": rest_params, "weight_decay": args.wd},
-            ],
-            lr=args.lr,
-            betas=(args.beta1, args.beta2),
-            eps=args.eps,
-        )
-        if args.horovod:
-            optimizer = hvd.DistributedOptimizer(optimizer, named_parameters=model.named_parameters())
-            hvd.broadcast_parameters(model.state_dict(), root_rank=0)
-            hvd.broadcast_optimizer_state(optimizer, root_rank=0)
+        # optimizer = optim.AdamW(
+        #     [
+        #         {"params": gain_or_bias_params, "weight_decay": 0.},
+        #         {"params": rest_params, "weight_decay": args.wd},
+        #     ],
+        #     lr=args.lr,
+        #     betas=(args.beta1, args.beta2),
+        #     eps=args.eps,
+        # )
 
         scaler = GradScaler() if args.precision == "amp" else None
         total_steps = data["train"].dataloader.num_batches * args.epochs

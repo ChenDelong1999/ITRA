@@ -324,6 +324,33 @@ def parse_args():
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Optimization
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    
+    # Optimizer parameters
+    # From https://github.com/LightDXY/FT-CLIP/blob/da6eab12af754e59c88d490b0ba3835d8f61802b/run_class_finetuning.py#L64
+    parser.add_argument('--opt', default='adamw', type=str, metavar='OPTIMIZER',
+                        help='Optimizer (default: "adamw"')
+    parser.add_argument('--opt_eps', default=1e-8, type=float, metavar='EPSILON',
+                        help='Optimizer Epsilon (default: 1e-8)')
+    parser.add_argument('--opt_betas', default=None, type=float, nargs='+', metavar='BETA',
+                        help='Optimizer Betas (default: None, use opt default)')
+    parser.add_argument('--clip_grad', type=float, default=None, metavar='NORM',
+                        help='Clip gradient norm (default: None, no clipping)')
+    parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
+                        help='SGD momentum (default: 0.9)')
+    parser.add_argument('--weight_decay', type=float, default=0.05,
+                        help='weight decay (default: 0.05)')
+    parser.add_argument('--weight_decay_end', type=float, default=None, help="""Final value of the
+        weight decay. We use a cosine schedule for WD and using a larger decay by
+        the end of training improves performance for ViTs.""")
+        
+    parser.add_argument('--backbone_decay', type=float, default=1)
+    parser.add_argument('--layer_decay_image', type=float, default=1)
+    parser.add_argument('--layer_decay_text', type=float, default=1)
+    # - - - - -
+
+    # parser.add_argument('--lr', type=float, default=5e-4, metavar='LR',
+    #                     help='learning rate (default: 5e-4)')
+
     parser.add_argument("--batch-size", type=int, default=64, help="Batch size per GPU.")
     parser.add_argument("--epochs", type=int, default=32, help="Number of epochs to train for.")
     parser.add_argument("--restart", default=False, action="store_true")

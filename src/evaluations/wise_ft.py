@@ -4,10 +4,8 @@ import copy
 
 def get_wise_ft_model(finetuned_model, args, alpha=0.5):
     finetuned_model_without_ddp = finetuned_model.module if args.distributed else finetuned_model
-    args_ = copy.deepcopy(args)
-    args_.distributed = False
-
-    zeroshot_model, preprocess_train, preprocess_val, preprocess_aug = get_model(args_)
+    
+    zeroshot_model, preprocess_train, preprocess_val, preprocess_aug = get_model(args)
     theta_0 = zeroshot_model.state_dict()
     theta_1 = finetuned_model_without_ddp.state_dict()
 
@@ -22,5 +20,6 @@ def get_wise_ft_model(finetuned_model, args, alpha=0.5):
 
     # update the model acccording to the new weights
     zeroshot_model.load_state_dict(theta)
+    zeroshot_model.eval()
 
     return zeroshot_model

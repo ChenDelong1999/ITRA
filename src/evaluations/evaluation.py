@@ -24,6 +24,8 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
     if args.eval_with_wise_ft !=1:
         logging.info( f"Perform Wise-FT evaluation with alpha={args.eval_with_wise_ft}")
         model = get_wise_ft_model(model, args, alpha=args.eval_with_wise_ft)
+        distributed = args.distributed
+        args.distributed = False
 
     if fast_evaluation:
         args.fast_evaluation = True
@@ -163,5 +165,8 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
         with open(os.path.join(args.logs, args.name, "results.jsonl"), "a+") as f:
             f.write(json.dumps(all_metrics))
             f.write("\n")
-
+            
+            
+    if args.eval_with_wise_ft !=1:
+        args.distributed = distributed
     return all_metrics

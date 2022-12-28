@@ -43,6 +43,7 @@ def get_model(args):
         text_backbone = CLIP_model
         tokenizer = open_clip.tokenize
         args.text_width, args.text_dim = text_backbone.text_projection.size()
+        text_backbone.layers = open_clip.get_model_config(args.text_model)['text_cfg']['layers']
                     
         if args.adapter is not None:
             raise RuntimeError(f'Adapter {args.adapter} is not avaliable for {args.text_model_builder} models!')
@@ -133,6 +134,16 @@ def get_model(args):
         )
         image_backbone = CLIP_model.visual
         args.image_dim = image_backbone.output_dim
+        image_backbone.layers = open_clip.get_model_config(args.image_model)['vision_cfg']['layers']
+        if type(image_backbone.layers) == list:
+            image_backbone.layers = len(image_backbone.layers)
+        if 'RN' in args.image_model:
+            image_backbone.arch = 'ResNet'
+            image_backbone.layers += 2 # stem and attention pooling accont for two layers
+        elif 'ViT' in args.image_model:
+            image_backbone.arch = 'ViT'
+        else:
+            raise RuntimeError(f'Unrecognized image backbone architechture')
 
         
     elif args.image_model_builder=='chineseclip':
