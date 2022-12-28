@@ -35,6 +35,8 @@ from evaluations.evaluation import evaluate
 
 from loss import get_loss, NEED_LOGIT_SCALE
 
+from timm.utils import ModelEma
+
 # to disable warning "huggingface/tokenizers: 
 # ("The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -145,7 +147,18 @@ def main():
     else:
         model, preprocess_train, preprocess_val, preprocess_aug = get_model(args)
 
-    
+    model_ema = None
+    if args.model_ema:
+        # Important to create EMA model after cuda(), DP wrapper, and AMP but before SyncBN and DDP wrapper
+        model_ema = ModelEma(
+            model,
+            decay=args.model_ema_decay,
+            device='cpu' if args.model_ema_force_cpu else '',
+            resume='')
+        if is_master(args):
+            logging.info("Using EMA with decay = %.8f" % args.model_ema_decay)
+
+
     if args.distributed and not args.horovod:
         if args.use_bn_sync:
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -353,7 +366,7 @@ def main():
         return
     
     if args.eval_first:
-        evaluate(model, start_epoch, preprocess_val, args, writer)
+        evaluate(model_ema.ema if args.model_ema else model, start_epoch, preprocess_val, args, writer)
     
     if is_master(args):
         logging.info("args:")
@@ -384,6 +397,7 @@ def main():
         start = time.time()
         train_one_epoch(
             model=model, 
+            model_ema=model_ema, 
             data=data, 
             epoch=epoch, 
             optimizer=optimizer, 
@@ -391,7 +405,7 @@ def main():
             scheduler=scheduler,  
             loss=loss, 
             args=args, 
-            writer=writer 
+            writer=writer
             )
         if is_master(args):
             duration = (time.time()-start)/60
@@ -413,7 +427,7 @@ def main():
             checkpoint_dict = {
                 "epoch": completed_epoch,
                 "name": args.name,
-                "state_dict": model.state_dict(),
+                "state_dict": model.state_dict() if not args.model_ema else model_ema.ema.state_dict(),
                 "optimizer": optimizer.state_dict(),
             }
             if scaler is not None:
@@ -430,9 +444,9 @@ def main():
                 torch.save(
                     checkpoint_dict,
                     os.path.join(args.checkpoint_path, f"epoch_latest.pt"),
-                )
+                )            
+            evaluate(model if not args.model_ema else model_ema.ema, completed_epoch, preprocess_val, args, writer)
 
-        evaluate(model, completed_epoch, preprocess_val, args, writer)
         if args.distributed:
             dist.barrier()
 

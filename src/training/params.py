@@ -342,6 +342,11 @@ def parse_args():
     parser.add_argument('--weight_decay_end', type=float, default=None, help="""Final value of the
         weight decay. We use a cosine schedule for WD and using a larger decay by
         the end of training improves performance for ViTs.""")
+
+        
+    parser.add_argument('--model_ema', action='store_true', default=False)
+    parser.add_argument('--model_ema_decay', type=float, default=0.9999, help='')
+    parser.add_argument('--model_ema_force_cpu', action='store_true', default=False, help='')
         
     parser.add_argument('--backbone_decay', type=float, default=1)
     parser.add_argument('--layer_decay_image', type=float, default=1)
@@ -358,7 +363,7 @@ def parse_args():
     parser.add_argument("--beta1", type=float, default=None, help="Adam beta 1.")
     parser.add_argument("--beta2", type=float, default=None, help="Adam beta 2.")
     parser.add_argument("--eps", type=float, default=None, help="Adam epsilon.")
-    parser.add_argument("--wd", type=float, default=0.2, help="Weight decay.")
+    # parser.add_argument("--wd", type=float, default=0.2, help="Weight decay.")
     parser.add_argument("--warmup", type=int, default=10000, help="Number of steps to warmup for.")
     parser.add_argument(
         "--use-bn-sync",

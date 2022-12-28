@@ -23,6 +23,7 @@ from loss import CLIPLoss
 
 def train_one_epoch(
     model, 
+    model_ema, 
     data, 
     epoch, 
     optimizer, 
@@ -80,13 +81,14 @@ def train_one_epoch(
             images = images.to(device=device, non_blocking=True)
         data_time_m.update(time.time() - end)
         optimizer.zero_grad()
+        if model_ema is not None:
+            model_ema.update(model)
 
         # # # # # # # # # # # # # # # # # # 
         # model forward
         # # # # # # # # # # # # # # # # # # 
         with autocast():
             with forward_context():
-
                 if args.loss in NEED_PROTOTYPE_LAYER:
                     if args.teacher=='text':
                         w = model_without_ddp.image_projection_head.last_layer.weight_v.data.clone()

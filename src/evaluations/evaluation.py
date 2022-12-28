@@ -27,6 +27,11 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
         distributed = args.distributed
         args.distributed = False
 
+        
+    if args.model_ema:
+        distributed = args.distributed
+        args.distributed = False
+    
     if fast_evaluation:
         args.fast_evaluation = True
         linear_eval_datasets = ['ImageNet-50k']
@@ -167,6 +172,7 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None, fast_evaluation=Tru
             f.write("\n")
             
             
-    if args.eval_with_wise_ft !=1:
+    if args.eval_with_wise_ft !=1 or args.model_ema:
         args.distributed = distributed
+        
     return all_metrics
