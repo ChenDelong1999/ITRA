@@ -146,7 +146,7 @@ class CsvDataset(Dataset):
 
 # TODO: remove nori when publish
 class ImageNet_nori(Dataset):
-    # modified from https://git-core.megvii-inc.com/lizeming/mt/-/blob/dev/megssl/data/datasets/imagenet.py
+    
     def __init__(self, transform, split='val'):
 
         super(ImageNet_nori, self).__init__()
