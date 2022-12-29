@@ -1,54 +1,44 @@
 # VISSL disk_folder
 cd '/data/codes/vissl'
 export PYTHONPATH="."
-eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 python extra_scripts/datasets/create_euro_sat_data_files.py -i /data/Datasets/euro_sat/ -o /data/Datasets/euro_sat -d
 
 cd '/data/codes/vissl'
 export PYTHONPATH="."
-eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 python extra_scripts/datasets/create_food101_data_files.py -i /data/Datasets/food101/ -o /data/Datasets/food101 -d
 
 cd '/data/codes/vissl'
 export PYTHONPATH="."
-eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 python extra_scripts/datasets/create_kitti_dist_data_files.py -i /data/Datasets/kitti_dist/ -o /data/Datasets/kitti_dist -d
 
 cd '/data/codes/vissl'
 export PYTHONPATH="."
-eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 python extra_scripts/datasets/create_patch_camelyon_data_files.py -i /data/Datasets/patch_camelyon/ -o /data/Datasets/patch_camelyon -d
 
 cd '/data/codes/vissl'
 export PYTHONPATH="."
-eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 python extra_scripts/datasets/create_food101_data_files.py -i /data/Datasets/food101/ -o /data/Datasets/food101 -d
 
 cd '/data/codes/vissl'
 export PYTHONPATH="."
-eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 python extra_scripts/datasets/create_food101_data_files.py -i /data/Datasets/food101/ -o /data/Datasets/food101 -d
 
 cd '/data/codes/vissl'
 export PYTHONPATH="."
-eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 python extra_scripts/datasets/create_ucf101_data_files.py -i /data/Datasets/ucf101-vissl/ -o /data/Datasets/ucf101-vissl -d
 
 cd '/data/codes/vissl'
 export PYTHONPATH="."
-eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 python extra_scripts/datasets/create_stanford_cars_data_files.py -i /data/Datasets/stanford_cars-vissl/ -o /data/Datasets/stanford_cars-vissl -d
 
 cd '/data/codes/vissl'
 export PYTHONPATH="."
-eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 python extra_scripts/datasets/create_k700_data_files.py -i /data/Datasets/k700/ -o /data/Datasets/k700 -d
 
 # VISSL disk_filelist
 
 cd '/data/codes/vissl'
 export PYTHONPATH="."
-eval $(curl -s http://deploy.i.brainpp.cn/httpproxy)
 python extra_scripts/datasets/create_sun397_data_files.py -i /data/Datasets/sun397/ -o /data/Datasets/sun397 -d
 
 
@@ -64,8 +54,6 @@ import torchvision
 # dataset = torchvision.datasets.RenderedSST2(root='/data/Datasets/RenderedSST2', download='True')
 #dataset = torchvision.datasets.SVHN(root='/data/Datasets/SVHN', download='True')
 dataset = torchvision.datasets.MNIST(root='/data/Datasets/MNIST', download='True')
-
-# wiki https://wiki.megvii-inc.com/pages/viewpage.action?pageId=297991443
 
 cd /data/Datasets
 oss cp 's3://research-model-hh-b/Dataset/fine_grained/SUN397.tar.gz' 'SUN397.tar.gz'
