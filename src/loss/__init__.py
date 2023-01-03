@@ -6,13 +6,14 @@ from .BarlowTwins import BarlowTwins
 from .RKD import RKD
 from .CompRess import CompReSS, CompReSSA
 from .CLIP import CLIPLoss
+from .UniCL import UniCLLoss
 from .DINO import DINOLoss
 from .SEED import SEED
 from .ProtoCPC import protocpc_loss
 from .ProtoRKD import ProtoRKDLoss
 
-NEED_LOGIT_SCALE = ['InfoNCE']
-NEED_GATHER = ['InfoNCE']
+NEED_LOGIT_SCALE = ['InfoNCE', 'UniCL']
+NEED_GATHER = ['InfoNCE', 'UniCL']
 UNI_DIRECTIONAL = ['CompRess-1q', 'SEED', 'DINO', 'ProtoCPC']
 NEED_PROTOTYPE_LAYER = ['DINO', 'ProtoCPC', 'ProtoRKD']
 
@@ -38,6 +39,8 @@ def get_loss(args):
         return SEED
     elif args.loss=='InfoNCE':
         return CLIPLoss
+    elif args.loss=='UniCL':
+        return UniCLLoss
     elif args.loss=='DINO':
         return DINOLoss
     elif args.loss=='ProtoCPC':

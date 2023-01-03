@@ -10,6 +10,8 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.distributed import DistributedSampler
 
+from evaluations.downstream_datasets import get_dataset, AVALIABLE_DATASETS
+
 
 try:
     import horovod.torch as hvd
@@ -30,32 +32,96 @@ from torchvision.datasets.coco import CocoCaptions
 import os
 import random
 
-class COCOCaptionsDataset(Dataset):
-    def __init__(self, transforms, args, index_mapping=None):
+
+class ItraDataset(Dataset):
+    def __init__(self, datasets, args, index_mapping=None) -> None:
+        super().__init__()
+        self.datasets = datasets
         
-        if args.train_data=='mscoco_captions_2014':
+        self.n_samples = []
+        self.index2dataset = []
+        self.n_classes = []
+
+        for i in range(len(self.datasets)):
+            dataset = self.datasets[i]
+            self.n_samples.append(len(dataset))
+            self.index2dataset.extend([i]*len(dataset))
+
+            if dataset.type=='classification':
+                self.n_classes.append(len(dataset.base_dataset.classes))
+            elif dataset.type=='image-text-pairs':
+                self.n_classes.append(len(dataset))
+
+        if len(datasets) > 0:
+            logging.info(f'Building {len(datasets)} dataset: [{args.train_data}]. n-samples: {self.n_samples}, n-classes: {self.n_classes}')
+        
+        if index_mapping is None:
+            self.index_mapping=torch.arange(sum(self.n_samples))
+        else:
+            self.index_mapping = index_mapping
+
+
+    def __len__(self):
+        return sum(self.n_samples)
+    
+    def __getitem__(self, episodic_index):
+        
+        index = self.index_mapping[episodic_index]
+        dataset_index = self.index2dataset[index]
+        
+        previous_samples_sum = sum(self.n_samples[:dataset_index])         
+        subset_index, image, caption, label = self.datasets[dataset_index][index-previous_samples_sum]
+
+        if label!=-1:
+            previous_classes_sum = sum(self.n_classes[:dataset_index])  
+            label += previous_classes_sum
+
+        return index, image, caption, label
+        
+
+class COCOCaptionsDataset(Dataset):
+    def __init__(self, dataset_name, transforms, args):
+        
+        if dataset_name=='mscoco_captions_2014':
             coco_train_root = os.path.join(args.eval_data_dir, 'coco2014/train2014')
             coco_train_json = os.path.join(args.eval_data_dir, 'coco2014/annotations/captions_train2014.json')
             self.coco_dataset = CocoCaptions(root=coco_train_root, annFile=coco_train_json, transform=transforms)
             
-        elif args.train_data=='mscoco_captions':
+        elif dataset_name=='mscoco_captions':
             coco_train_root = os.path.join(args.eval_data_dir, 'coco2017/train2017')
             coco_train_json = os.path.join(args.eval_data_dir, 'coco2017/annotations/captions_train2017.json')
             self.coco_dataset = CocoCaptions(root=coco_train_root, annFile=coco_train_json, transform=transforms)
         
-        if index_mapping is None:
-            self.index_mapping=torch.arange(len(self.coco_dataset))
         else:
-            self.index_mapping = index_mapping
+            raise RuntimeError(f'{dataset_name} not supported!')
+        
+        self.type = 'image-text-pairs'
         
     def __len__(self):
-        return len(self.index_mapping)
+        return len(self.coco_dataset)
 
-    def __getitem__(self, episodic_index):
-        index = self.index_mapping[episodic_index]
+    def __getitem__(self, index):
         img, captions = self.coco_dataset[index]
-        return episodic_index, img, captions[random.randint(0,4)]
+        return index, img, captions[random.randint(0,4)], -1
   
+
+class PromptedClassificationDataset(Dataset):
+    def __init__(self, dataset_name, transforms, args) -> None:
+        super().__init__()
+        logging.debug(f'Building classification dataset {dataset_name} with prompt.')
+        self.base_dataset = get_dataset(dataset_name, split='train', root=args.eval_data_dir, transform=transforms)
+        self.type = 'classification'
+    
+    def __len__(self):
+        return len(self.base_dataset)
+
+    def __getitem__(self, index):
+        image, label = self.base_dataset[index]
+        class_name = self.base_dataset.classes[label]
+        template = self.base_dataset.templates[random.randint(0,len(self.base_dataset.templates)-1)]
+        caption = template.replace('{}',class_name)
+        return index, image, caption, label
+
 
 class CsvDataset(Dataset):
     def __init__(self, input_filename, transforms, img_key, caption_key, aug=None, sep="\t", dataset_size=None, index_mapping=None, skip_image=False, nori_dataset=False, images_dir=''):
@@ -93,19 +159,14 @@ class CsvDataset(Dataset):
             self.images = self.images[:dataset_size]
             self.captions = self.captions[:dataset_size]
         
-        if index_mapping is None:
-            self.index_mapping=torch.arange(len(self.captions))
-        else:
-            self.index_mapping = index_mapping
-        
         self.skip_image = skip_image
+        self.type = 'image-text-pairs'
         logging.debug('Done loading data.')
 
     def __len__(self):
-        return len(self.index_mapping)
+        return len(self.captions)
 
-    def __getitem__(self, episodic_index):
-        index = self.index_mapping[episodic_index]
+    def __getitem__(self, index):
         texts = str(self.captions[index].decode('utf-8'))
 
         if self.skip_image:
@@ -125,7 +186,7 @@ class CsvDataset(Dataset):
             else:
                 images = image_train
         
-        return episodic_index, images, texts
+        return index, images, texts, -1
 
     def get_data(self, episode_index):
         idx = self.index_mapping[episode_index]
@@ -217,7 +278,6 @@ class ImageNet_50k(Dataset):
     def __len__(self):
         return 50000
 
-
 @dataclass
 class DataInfo:
     dataset: Dataset
@@ -226,24 +286,30 @@ class DataInfo:
 
 
 def get_csv_dataset(args, preprocess_fn, aug, is_train, index_mapping):
-    input_filename = args.train_data if is_train else args.val_data
-    assert input_filename
-    if input_filename=='mscoco_captions':
-        dataset = COCOCaptionsDataset(transforms=preprocess_fn, args=args, index_mapping=index_mapping)
-    else:
-        dataset = CsvDataset(
-            input_filename,
-            preprocess_fn,
-            aug=aug if args.BYOL else None,
-            img_key=args.csv_img_key,
-            caption_key=args.csv_caption_key,
-            sep=args.csv_separator,
-            dataset_size=args.dataset_size,
-            index_mapping=index_mapping,
-            #skip_image=args.cache_teacher is not None
-            nori_dataset=args.nori_dataset,
-            images_dir=args.images_dir
-            )
+
+    datasets = []
+    for dataset_name in args.train_data.split(','):
+        if 'mscoco_captions' in dataset_name:
+            dataset = COCOCaptionsDataset(dataset_name=dataset_name, transforms=preprocess_fn, args=args)
+        elif dataset_name in AVALIABLE_DATASETS:
+            dataset = PromptedClassificationDataset(dataset_name=dataset_name, transforms=preprocess_fn, args=args)
+        else:
+            dataset = CsvDataset(
+                dataset_name,
+                preprocess_fn,
+                aug=aug if args.BYOL else None,
+                img_key=args.csv_img_key,
+                caption_key=args.csv_caption_key,
+                sep=args.csv_separator,
+                dataset_size=args.dataset_size,
+                #skip_image=args.cache_teacher is not None
+                nori_dataset=args.nori_dataset,
+                images_dir=args.images_dir
+                )
+        datasets.append(dataset)
+
+    dataset = ItraDataset(datasets, args, index_mapping)
+
     num_samples = len(dataset)
     sampler = DistributedSampler(dataset) if args.distributed and is_train else None
     shuffle = is_train and sampler is None

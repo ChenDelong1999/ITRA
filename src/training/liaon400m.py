@@ -32,12 +32,11 @@ for x_tar in range(10000):
         pickle.dump(caption_dict, tf)
 
 
-exit()
 
-# def get_caption(x_part, x_tar, x_jpg):
-#     tar = tarfile.open(fileobj=refile.smart_open(full_dataset+f'laion400m_part{x_part}/{x_tar}.tar', "rb"))
-#     text = tar.extractfile(f"{x_jpg}.txt").read()
-#     return text
+def get_caption(x_part, x_tar, x_jpg):
+    tar = tarfile.open(fileobj=refile.smart_open(full_dataset+f'laion400m_part{x_part}/{x_tar}.tar', "rb"))
+    text = tar.extractfile(f"{x_jpg}.txt").read()
+    return text
 
 nori_lists = os.listdir(nori_list_dir)
 samples = []

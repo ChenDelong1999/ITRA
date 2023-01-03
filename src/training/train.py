@@ -68,8 +68,11 @@ def train_one_epoch(
     for i, batch in enumerate(dataloader):
         step = num_batches_per_epoch * epoch + i
         scheduler(step)
-        index, images, texts = batch
+
+        index, images, texts, labels = batch
+        all_labels = get_gathered_item(labels.cuda(), args)
         all_index = get_gathered_item(index.cuda(), args)
+        
         if len(index)!=args.batch_size and args.cache_teacher is None:
             continue  # drop the last incomplete batch if train        
 
@@ -131,10 +134,13 @@ def train_one_epoch(
                     teacher_features, student_features = all_image_features, all_text_features
                 
                 if args.loss in NEED_LOGIT_SCALE:
-                    distill_loss = loss(teacher_features, student_features, logit_scale=logit_scale)
+                    if args.loss=='UniCL':
+                        align_loss = loss(teacher_features, student_features, logit_scale=logit_scale, labels=all_labels)
+                    else:
+                        align_loss = loss(teacher_features, student_features, logit_scale=logit_scale)
                 else:
-                    distill_loss = loss(teacher_features, student_features)            
-                total_loss = args.w_distill * distill_loss + ssl_loss
+                    align_loss = loss(teacher_features, student_features)            
+                total_loss = args.w_distill * align_loss + ssl_loss
         
         if args.cache_teacher is not None:
             # # # # # # # # # # # # # # # # # # 
@@ -198,7 +204,7 @@ def train_one_epoch(
                 
                 # Save train loss / etc. Using non avg meter values as loggers have their own smoothing
                 log_data = {
-                    "loss-distill": distill_loss.item(),
+                    "loss-distill": align_loss.item(),
                     "loss-ssl": ssl_loss.item() if args.BYOL or args.w_simcse > 0 else 0,
                     "learning_rate": optimizer.param_groups[0]["lr"],
                     "gradient-norm": norm,

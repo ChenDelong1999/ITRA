@@ -80,6 +80,12 @@ def parse_args():
         "--pretrained-image-model", action="store_true", default=False,
         help="whether load pretrained weigth for the image backbone"
     )
+    
+    parser.add_argument(
+        "--image-resolution",
+        type=int,
+        default=224,
+    ) 
     parser.add_argument(
         "--image-head-n-layers", type=int, default=0,
         help="how many MLP layers for image projection head",

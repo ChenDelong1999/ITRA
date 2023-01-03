@@ -182,8 +182,8 @@ def get_model(args):
             image_backbone.head=torch.nn.Identity()
         image_backbone.to(device=args.device)
 
-        preprocess_train, preprocess_val = training.transforms.preprocess_train, training.transforms.preprocess_val
-    
+        preprocess_train = training.transforms.get_preprocess(image_resolution=args.image_resolution, is_train=True, aug=args.augmentation)
+        preprocess_val = training.transforms.get_preprocess(image_resolution=args.image_resolution, is_train=False, aug=None)
     
     elif args.image_model_builder=='torchhub':
         if not args.pretrained_image_model and is_master(args):
