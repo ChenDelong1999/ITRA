@@ -130,21 +130,21 @@ def zero_shot_eval(model, zeroshot_dataset, epoch, preprocess, args):
     # if zeroshot_dataset=='imagenet':
     #    dataset = ImageNet_nori(transform=preprocess, split='val')
     # elif zeroshot_dataset=='cifar10':
-    #     dataset = CIFAR10(root=args.eval_data_dir, download=True, train=False, transform=preprocess)
+    #     dataset = CIFAR10(root=args.datasets_dir, download=True, train=False, transform=preprocess)
     # elif zeroshot_dataset=='cifar100':
-    #     dataset = CIFAR100(root=args.eval_data_dir, download=True, train=False, transform=preprocess)
+    #     dataset = CIFAR100(root=args.datasets_dir, download=True, train=False, transform=preprocess)
     # elif zeroshot_dataset=='stl10':
-    #     dataset = STL10(root=args.eval_data_dir, download=True, split='test', transform=preprocess)
+    #     dataset = STL10(root=args.datasets_dir, download=True, split='test', transform=preprocess)
     # else:
     #     # for ['birdsnap', 'country211', 'flowers102', 'gtsrb', 'stanford_cars', 'ucf101']
-    #     data_path = f'{args.eval_data_dir}/{zeroshot_dataset}/test'
+    #     data_path = f'{args.datasets_dir}/{zeroshot_dataset}/test'
     #     if zeroshot_dataset == 'ucf101':
     #         data_path += 'list01'
     #     logging.info(f'Loading data from  {data_path}')
 
     #     dataset = torchvision.datasets.ImageFolder(data_path, transform=preprocess)
     
-    dataset = get_dataset(dataset_name=zeroshot_dataset, split='test', root=args.eval_data_dir, transform=preprocess)
+    dataset = get_dataset(dataset_name=zeroshot_dataset, split='test', root=args.datasets_dir, transform=preprocess)
 
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, num_workers=args.evaluation_workers)
 

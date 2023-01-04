@@ -111,7 +111,7 @@ def ms_marco(model, args):
 
     
 def sts_benchmark(model, args):
-    sts_dataset_path = os.path.join(args.eval_data_dir, 'stsbenchmark.tsv.gz')
+    sts_dataset_path = os.path.join(args.datasets_dir, 'stsbenchmark.tsv.gz')
 
     if not os.path.exists(sts_dataset_path):
         util.http_get('https://sbert.net/datasets/stsbenchmark.tsv.gz', sts_dataset_path)
@@ -142,7 +142,7 @@ def sts_benchmark(model, args):
 
 
 def sts12_sts16_eval(model, args):
-    PATH_TO_DATA = os.path.join(args.eval_data_dir,'simcse_sts_data')
+    PATH_TO_DATA = os.path.join(args.datasets_dir,'simcse_sts_data')
     # Set params for SentEval
     params = {'task_path': PATH_TO_DATA, 'usepytorch': True, 'kfold': 10}
     params['classifier'] = {'nhid': 0, 'optim': 'adam', 'batch_size': 64,
@@ -229,7 +229,7 @@ def word_evaluations(model, args):
 
     results = []
     for EVALUATION in ['rg65.csv', 'simlex999.csv', 'wordsim353.csv']:
-        intrinsic_evaluation = pd.read_csv(os.path.join(args.eval_data_dir, EVALUATION), index_col=None, sep=';', header=None)
+        intrinsic_evaluation = pd.read_csv(os.path.join(args.datasets_dir, EVALUATION), index_col=None, sep=';', header=None)
         words_left= intrinsic_evaluation[0].tolist()
         words_right = intrinsic_evaluation[1].tolist()
         relatedness = intrinsic_evaluation[2].tolist()

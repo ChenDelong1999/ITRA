@@ -5,12 +5,13 @@ import os
 import random
 from datetime import datetime
 import numpy as np
-import matplotlib.pyplot as plt
 
 import torch
 from torch import optim
 import torch.distributed as dist
 from torch.cuda.amp import GradScaler
+
+from timm.utils import ModelEma
 
 try:
     import wandb
@@ -31,13 +32,9 @@ from training.train import train_one_epoch
 from training.optimization import create_optimizer, get_parameter_groups, LayerDecayValueAssigner
 
 from evaluation.evaluation import evaluate
-
 from data.train_data import get_data
-from data.classification_datasets import AVALIABLE_DATASETS
+from loss import get_loss
 
-from loss import get_loss, NEED_LOGIT_SCALE
-
-from timm.utils import ModelEma
 
 # to disable warning "huggingface/tokenizers: 
 # ("The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks...")

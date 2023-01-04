@@ -162,7 +162,7 @@ def parse_args():
         default=False,
     )
     parser.add_argument(
-        "--eval-data-dir",
+        "--datasets-dir",
         type=str,
         default=None,
         help="Path to datasets for evaluation",

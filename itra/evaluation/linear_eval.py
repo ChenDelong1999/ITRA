@@ -201,11 +201,11 @@ def get_dataset_features(model, dataset_name, root, preprocess, args):
     #     train = ImageNet_50k(transform=preprocess)
     #     test = ImageNet_nori(split='val', transform=preprocess)
     # else: 
-    #     train = ImageFolder(f'{args.eval_data_dir}/{dataset_name}/train', transform=preprocess)
-    #     test = ImageFolder(f'{args.eval_data_dir}/{dataset_name}/test', transform=preprocess)
+    #     train = ImageFolder(f'{args.datasets_dir}/{dataset_name}/train', transform=preprocess)
+    #     test = ImageFolder(f'{args.datasets_dir}/{dataset_name}/test', transform=preprocess)
 
-    train = get_dataset(dataset_name=dataset_name, split='train', root=args.eval_data_dir, transform=preprocess)
-    test = get_dataset(dataset_name=dataset_name, split='test', root=args.eval_data_dir, transform=preprocess)
+    train = get_dataset(dataset_name=dataset_name, split='train', root=args.datasets_dir, transform=preprocess)
+    test = get_dataset(dataset_name=dataset_name, split='test', root=args.datasets_dir, transform=preprocess)
 
         
     # Calculate the image features
@@ -299,7 +299,7 @@ def linear_eval(model, dataset_names, epoch, preprocess, args):
     results = {}
     for dataset_name in dataset_names:
         logging.info(f'starting linear evaluation on {dataset_name}...')
-        train_features, train_labels, test_features, test_labels = get_dataset_features(model, dataset_name, args.eval_data_dir, preprocess, args)
+        train_features, train_labels, test_features, test_labels = get_dataset_features(model, dataset_name, args.datasets_dir, preprocess, args)
         
         if args.linear_prob_mode=='ImageNet':
             knn_acc = get_knn_acc(train_features, train_labels, test_features, test_labels, args)

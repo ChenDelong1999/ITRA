@@ -31,8 +31,8 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None):
         distributed = args.distributed
         args.distributed = False
     
-    linear_eval_datasets = ['ImageNet-50k']
-    zeroshot_datasets = ['CIFAR10', 'CIFAR100']
+    linear_eval_datasets = ['CIFAR10']
+    zeroshot_datasets = ['CIFAR10']
     args.evaluation_workers = 8
 
     # zeroshot_datasets= [

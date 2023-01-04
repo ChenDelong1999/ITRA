@@ -242,7 +242,7 @@ def get_model(args):
                         if not args.lock_image_model:
                             break
 
-    model = WrappedModel(
+    model = ItraModel(
         text_backbone=text_backbone, 
         image_backbone=image_backbone, 
         tokenizer=tokenizer, 
@@ -253,7 +253,7 @@ def get_model(args):
 
 
 
-class WrappedModel(nn.Module):
+class ItraModel(nn.Module):
     def __init__(self, text_backbone, image_backbone, tokenizer, args, prompt=None) -> None:
         super().__init__()
         self.device = args.device
