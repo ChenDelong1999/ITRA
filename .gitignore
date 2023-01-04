@@ -6,7 +6,9 @@ results/
 weights/
 cache/
 data/
-src/evaluations/vision_benchmark/outputs
+dev/
+itra/evaluation/vision_benchmark/outputs
+itra/mutual_information
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

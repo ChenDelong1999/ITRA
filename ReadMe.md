@@ -14,7 +14,7 @@
 A codebase for flexible and efficient <b><u>I</u></b>mage <b><u>T</u></b>ext <b><u>R</u></b>epresentation <b><u>A</u></b>lignment
 </h3>
 
-[**Documentation**](https://itra.readthedocs.io/en/latest/)
+See the 👉[**Documentation**](https://itra.readthedocs.io/en/latest/)👈.
 
 <!-- 
 <br />
