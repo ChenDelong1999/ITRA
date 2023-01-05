@@ -213,10 +213,8 @@ def main():
         model_without_ddp = model.module if args.distributed else model
         if args.layer_decay_image < 1.0:
             num_layers_image = model_without_ddp.image_backbone.layers
-            num_layers_text = model_without_ddp.text_backbone.layers
             if is_master(args):
                 logging.info(f'Image backbone has {num_layers_image} layers')
-                logging.info(f'Text backbone has {num_layers_text} layers')
             decay = list(args.backbone_decay * args.layer_decay_image ** (num_layers_image + 1 - i) for i in range(num_layers_image + 2))
             decay[-1] /= args.backbone_decay
             assigner_image = LayerDecayValueAssigner(decay)
@@ -224,6 +222,9 @@ def main():
             assigner_image = None
             
         if args.layer_decay_text < 1.0:
+            num_layers_text = model_without_ddp.text_backbone.layers
+            if is_master(args):
+                logging.info(f'Text backbone has {num_layers_text} layers')
             decay = list(args.backbone_decay * args.layer_decay_text ** (num_layers_text + 1 - i) for i in range(num_layers_text + 2))
             decay[-1] /= args.backbone_decay
             assigner_text = LayerDecayValueAssigner(decay)
