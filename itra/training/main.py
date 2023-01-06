@@ -304,6 +304,7 @@ def main():
     start_epoch = 0
     if args.resume is not None:
         if os.path.isfile(args.resume):
+            logging.info(f"=> loading checkpoint from '{args.resume}'...")
             checkpoint = torch.load(args.resume, map_location=device)
             if 'epoch' in checkpoint:
                 # resuming a train checkpoint w/ epoch and optimizer state

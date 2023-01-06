@@ -32,7 +32,7 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None):
         args.distributed = False
     
     linear_eval_datasets = ['CIFAR10']
-    zeroshot_datasets = ['CIFAR10']
+    zeroshot_datasets = ['ImageNet']
     args.evaluation_workers = 8
 
     # zeroshot_datasets= [
