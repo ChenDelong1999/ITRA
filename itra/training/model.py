@@ -218,12 +218,10 @@ def get_model(args):
             for keyword in args.lock_text_partial.split(','):
                 if keyword.replace('!', '') in name:
                     if '!' in keyword:
-                        # logging.info(f'unfreezing: {name}')
                         param.requires_grad = True
                         if args.lock_text_model:
                             break
                     else:
-                        # logging.info(f'freezing: {name}')
                         param.requires_grad = False
                         if not args.lock_text_model:
                             break

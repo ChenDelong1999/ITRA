@@ -266,3 +266,44 @@ def create_adamw_optimizer(args, model, get_num_layer=None, get_layer_scale=None
             optimizer = Lookahead(optimizer)
 
     return optimizer
+
+
+def get_optimizer(model, args):
+    model_without_ddp = model.module if args.distributed else model
+    if args.layer_decay_image < 1.0:
+        num_layers_image = model_without_ddp.image_backbone.layers
+        if is_master(args):
+            logging.info(f'Image backbone has {num_layers_image} layers')
+        decay = list(args.backbone_decay * args.layer_decay_image ** (num_layers_image + 1 - i) for i in range(num_layers_image + 2))
+        decay[-1] /= args.backbone_decay
+        assigner_image = LayerDecayValueAssigner(decay)
+    else:
+        assigner_image = None
+        
+    if args.layer_decay_text < 1.0:
+        num_layers_text = model_without_ddp.text_backbone.layers
+        if is_master(args):
+            logging.info(f'Text backbone has {num_layers_text} layers')
+        decay = list(args.backbone_decay * args.layer_decay_text ** (num_layers_text + 1 - i) for i in range(num_layers_text + 2))
+        decay[-1] /= args.backbone_decay
+        assigner_text = LayerDecayValueAssigner(decay)
+    else:
+        assigner_text = None
+
+    # TODO
+    # skip_weight_decay_list = model.no_weight_decay()
+    skip_weight_decay_list = {'positional_embedding', 'class_embedding', 'logit_scale', 'bn', 'ln', 'bias'}
+    
+    # TODO
+    # args.disable_weight_decay_on_rel_pos_bias = False 
+    # if args.disable_weight_decay_on_rel_pos_bias:
+    #     for i in range(num_layers):
+    #         skip_weight_decay_list.add("blocks.%d.attn.relative_position_bias_table" % i)
+
+    return create_optimizer(
+            args, model_without_ddp, skip_list=skip_weight_decay_list,
+            get_num_layer_image=assigner_image.get_layer_id if assigner_image is not None else None, 
+            get_num_layer_text=assigner_text.get_layer_id if assigner_text is not None else None, 
+            get_layer_scale_image=assigner_image.get_scale if assigner_image is not None else None,
+            get_layer_scale_text=assigner_text.get_scale if assigner_text is not None else None,
+            )

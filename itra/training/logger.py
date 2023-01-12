@@ -1,4 +1,7 @@
 import logging
+import os
+import time
+from datetime import datetime
 
 
 def setup_logging(log_file, level, include_host=False):
@@ -24,3 +27,24 @@ def setup_logging(log_file, level, include_host=False):
         file_handler.setFormatter(formatter)
         logging.root.addHandler(file_handler)
 
+
+def get_exp_name(args):
+    if args.name is None:
+        name = '-'.join([
+            'L' if args.lock_image_model else 'U',
+            f'[{args.image_model.replace("/", "_")}-h{args.image_head_n_layers}]',
+            'L' if args.lock_text_model else 'U',
+            f'[{args.text_model.replace("/", "_")}-h{args.text_head_n_layers}]',
+            f"b_{int(args.batch_size * args.world_size)}",
+            f"ep_{args.epochs}",
+            datetime.now().strftime("%m_%d-%H_%M_%S"),
+        ])
+    else:
+        name = args.name
+
+    name.replace('/', '_')
+    if os.path.exists(os.path.join(args.logs, name)):
+        time.sleep(1)
+        name += '-'+datetime.now().strftime("%m_%d-%H_%M_%S")
+        print(f"args.name is changed to '{name}' to avoid duplication.")
+    return name
