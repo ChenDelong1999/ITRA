@@ -7,7 +7,7 @@ weights/
 cache/
 data/
 dev/
-itra/evaluation/vision_benchmark/outputs
+vision_benchmark/outputs
 itra/mutual_information
 
 # Byte-compiled / optimized / DLL files
