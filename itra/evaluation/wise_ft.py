@@ -1,6 +1,4 @@
-
-from training.model import get_model
-import copy
+from model.model import get_model
 
 def get_wise_ft_model(finetuned_model, args, alpha=0.5):
     finetuned_model_without_ddp = finetuned_model.module if args.distributed else finetuned_model

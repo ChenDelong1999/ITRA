@@ -1,3 +1,3 @@
 import timm
-from training.model import get_model
+from model.model import get_model
 

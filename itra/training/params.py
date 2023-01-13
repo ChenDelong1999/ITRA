@@ -1,5 +1,7 @@
 import argparse
-
+import yaml
+from model.model import AVALIABLE_TEXT_MODEL_BUILDER, AVALIABLE_IMAGE_MODEL_BUILDER
+from loss import AVALIABLE_LOSS_FUNCTIONS
 
 def get_default_params(model_name):
     # Params from paper (https://arxiv.org/pdf/2103.00020.pdf)
@@ -13,32 +15,35 @@ def get_default_params(model_name):
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    # Model Architechture Configurations
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-
-    # === text model === #  
     parser.add_argument(
-        "--text-model-builder",
-        choices=['openclip', 'chineseclip', 'huggingface', 'sbert'], 
-        help="use which libarary to build the text backbone",
+        "--config-yaml", default=None, type=str,
+        help="Load configurations from a yaml file. Priority: YAML > command line > argparse default value",
+    )  
+
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    # Model Architechture
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    
+    # === text model === #
+    parser.add_argument(
+        "--text-model-builder",choices=AVALIABLE_TEXT_MODEL_BUILDER, type=str, required=True,
+        help="Specify using which libarary to build the text backbone",
     )  
     parser.add_argument(
-        "--text-model", default='', type=str, 
-        help="In open_clip.list_models() or hugging face transformers, depend on text-model-builder",
-    )    
-    parser.add_argument(
-        "--text-model-tag", default='openai', type=str,
-        help="Use open_clip.list_pretrained_model_tags(your_model) to check available pretrained weights",
+        "--text-model", type=str, required=True, 
+        help="Name of text backbone. In open_clip.list_models() or hugging face transformers, depend on text-model-builder",
     )     
     parser.add_argument(
         "--text-pooler", type=str, default='cls',
         help="specify pooling streategy for models built by hugging face",
-    )
+    )  
+    parser.add_argument(
+        "--text-model-tag", default='openai', type=str,
+        help="Name of pretrained weights. Use open_clip.list_pretrained_model_tags(your_model) to check available pretrained weights",
+    )  
     parser.add_argument(
         "--pretrained-text-model", action="store_true", default=False,
-        help="whether load pretrained weigth for the text backbone", 
-        # TODO: support build model from scratch for huggingface transformer
+        help="Load pretrained weights for the text backbone", 
     )
     parser.add_argument(
         "--text-head-n-layers", type=int, default=0,
@@ -46,23 +51,29 @@ def parse_args():
     )
     parser.add_argument(
         "--max-seq-length", type=int, default=77,
-        help="Maximum sequence length for the text backbone",
+        help="Maximum sequence length for the text backbone from huggingface. OpenCLIP text models have a default max length of 77.",
     )
-    # TODO: check the implementation of CoOp-style prompt tuning
-    parser.add_argument("--prompt", action="store_true", default=False)
-    parser.add_argument("--n-prompt", type=int, default=1)
+    parser.add_argument(
+        "--prompt", action="store_true", default=False, 
+        help='Enable CoOp style prompt tuning'
+        )
+    parser.add_argument(
+        "--n-prompt", type=int, default=4, 
+        help='Use how many prompt vector.'
+        )
     parser.add_argument(
         "--adapter", type=str, default=None,
-        help="Path to csv filewith training data",
-    )
+        help="Enable adapter-transformer fine-tuning"
+        )
     parser.add_argument(
         "--lock-text-model", action="store_true", default=False,
-        help="whether include text backbone parameters in the optimizer",
-    )
+        help="Freeze text backbone during training"
+        )
     parser.add_argument(
         "--lock-text-partial", type=str, default='',
         help="list keywords of params names that you want to lock in the text model, seperate by ','. Add '!' at first to do reverse manipulation (partial unfreeze)",
     )
+
     # === image model === #
     parser.add_argument(
         "--image-model", default='', type=str,
@@ -70,97 +81,80 @@ def parse_args():
     )    
     parser.add_argument(
         "--image-model-tag", default='openai', type=str,
+        help="Name of pretrained weights from OpenCLIP or torchhub",
     )    
     parser.add_argument(
         "--image-model-builder",
-        choices=['openclip', 'chineseclip', 'torchvision', "torchhub"],
+        choices=AVALIABLE_IMAGE_MODEL_BUILDER,
         help="use which libarary to build the image backbone",
     ) 
     parser.add_argument(
         "--pretrained-image-model", action="store_true", default=False,
         help="whether load pretrained weigth for the image backbone"
     )
-    
-    parser.add_argument(
-        "--image-resolution",
-        type=int,
-        default=224,
-    ) 
+    parser.add_argument("--image-resolution", type=int, default=224) 
     parser.add_argument(
         "--image-head-n-layers", type=int, default=0,
         help="how many MLP layers for image projection head",
     )
     parser.add_argument(
-        "--joint-projection-dim", type=int, default=-1,
-        help="dimension of projected representations",
-    )
-    parser.add_argument(
         "--lock-image-model", action="store_true", default=False,
-        help="train image?",
+        help="Freeze image backbone during training",
     )
     parser.add_argument(
         "--lock-image-partial", type=str, default='',
-        help="list keywords of params names that you want to lock in the image model, seperate by ','. Add '!' at first to do reverse manipulation (partial unfreeze)",
+        help="List keywords of params names that you want to lock in the image model, seperate by ','. Add '!' at first to do reverse manipulation (partial unfreeze)",
     )
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    # Knowledge Distillation Configurations
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    
-    parser.add_argument("--w-rkd-d", type=float, default=0.5, help="Loss weight.")
-    parser.add_argument("--w-rkd-a", type=float, default=1.0, help="Loss weight.")
-    parser.add_argument("--dino-teacher-temp", type=float, default=0.04, help="")
 
+    # === modality agnositc configurations === #
     parser.add_argument(
-        "--loss",
-        type=str,
-        default='SimReg',
-        help="SimReg, RKD, CompRess, CompRess-1q, InfoNCE, etc.",
+        "--joint-projection-dim", type=int, default=-1,
+        help="Dimension of projected representations when both image and text backbones have projection head",
     )
-    parser.add_argument(
-        "--teacher",
-        type=str,
-        default='text',
-        choices=['text', "image"],
-    )
-    parser.add_argument(
-        "--cache-teacher",
-        default=None, 
-        type=str,
-        )
     parser.add_argument(
         "--cache-dir",
         default='cache/weights', 
         type=str,
         )
-
-    parser.add_argument("--w-simcse", type=float, default=0.0, help="simcse dropout-based contrastive")
-    parser.add_argument("--w-distill", type=float, default=1.0, help="")
-
+    parser.add_argument(
+        "--cache-teacher",
+        default=None, 
+        type=str,
+        help='Cache the features from frozen backbone to speedup training. Implementation NOT finished.'
+    )
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+    # Loss Functions
+    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     
-    parser.add_argument("--logit-scale", type=float, default=0.07, help="temperature")
+    parser.add_argument(
+        "--loss",
+        type=str,
+        required=True,
+        choices=AVALIABLE_LOSS_FUNCTIONS
+    )
+    parser.add_argument("--w-rkd-d", type=float, default=0.5, help="Loss weight.")
+    parser.add_argument("--w-rkd-a", type=float, default=1.0, help="Loss weight.")
+    parser.add_argument("--dino-teacher-temp", type=float, default=0.04, help="")
+    parser.add_argument("--w-simcse", type=float, default=0.0, help="simcse dropout-based contrastive")
+    parser.add_argument("--w-align", type=float, default=1.0, help="")   
+    parser.add_argument("--logit-scale", type=float, default=0.07, help="initialization of InfoNCE learnable temperature")
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Data and Episodic training
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    
-    parser.add_argument("--nori-dataset", action="store_true", default=False)
+
     parser.add_argument(
         "--train-data",
         type=str,
         default=None,
-        help="Path to csv filewith training data",
+        help="Path to csv file with training data, ms_coco or dataset name in AVALIABLE_CLASSIFICATION_DATASETS",
     )
     parser.add_argument(
         "--augmentation",
         choices=[None, "protoclip-light-augmentation"],
         default=None,
-        help="Use lighter augmentation for implicit contrast. Choices: [None, protoclip-light-augmentation]",
+        help="Use lighter augmentation for implicit contrast.",
     ) 
-    parser.add_argument(
-        "--BYOL",
-        action="store_true",
-        default=False,
-    )
     parser.add_argument(
         "--datasets-dir",
         type=str,
@@ -211,9 +205,7 @@ def parse_args():
         type=int,
         default=0,
         help="Set episode_size to 0 to disable episodic training",
-    )  
-
-    parser.add_argument("--retrieval-nori-dataset", action="store_true", default=False)
+    )
     parser.add_argument(
         "--retrieval-data",
         type=str,
@@ -243,28 +235,6 @@ def parse_args():
         type=str,
         default="",
     )
-
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    # Projection head
-    # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    # parser.add_argument(
-    #     "--projection-dim",
-    #     type=int,
-    #     default=128,
-    #     help="dimension of projected representations",
-    # ) 
-    # parser.add_argument(
-    #     "--projection-hidden-dim",
-    #     type=int,
-    #     default=2048,
-    #     help="dimension of projected representations",
-    # ) 
-    # parser.add_argument(
-    #     "--projection-n-layers",
-    #     type=int,
-    #     default=1,
-    #     help="dimension of projected representations",
-    # ) 
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Logging and checkpointing
@@ -349,7 +319,6 @@ def parse_args():
         weight decay. We use a cosine schedule for WD and using a larger decay by
         the end of training improves performance for ViTs.""")
 
-        
     parser.add_argument('--model_ema', action='store_true', default=False)
     parser.add_argument('--model_ema_decay', type=float, default=0.9999, help='')
     parser.add_argument('--model_ema_force_cpu', action='store_true', default=False, help='')
@@ -357,10 +326,6 @@ def parse_args():
     parser.add_argument('--backbone_decay', type=float, default=1)
     parser.add_argument('--layer_decay_image', type=float, default=1)
     parser.add_argument('--layer_decay_text', type=float, default=1)
-    # - - - - -
-
-    # parser.add_argument('--lr', type=float, default=5e-4, metavar='LR',
-    #                     help='learning rate (default: 5e-4)')
 
     parser.add_argument("--batch-size", type=int, default=64, help="Batch size per GPU.")
     parser.add_argument("--epochs", type=int, default=32, help="Number of epochs to train for.")
@@ -369,19 +334,12 @@ def parse_args():
     parser.add_argument("--beta1", type=float, default=None, help="Adam beta 1.")
     parser.add_argument("--beta2", type=float, default=None, help="Adam beta 2.")
     parser.add_argument("--eps", type=float, default=None, help="Adam epsilon.")
-    # parser.add_argument("--wd", type=float, default=0.2, help="Weight decay.")
     parser.add_argument("--warmup", type=int, default=0, help="Number of steps to warmup for.")
     parser.add_argument(
         "--use-bn-sync",
         default=False,
         action="store_true",
         help="Whether to use batch norm sync.")
-    parser.add_argument(
-        "--skip-scheduler",
-        action="store_true",
-        default=False,
-        help="Use this flag to skip the learning rate decay.",
-    )
     parser.add_argument(
         "--precision",
         choices=["amp", "fp16", "fp32"],
@@ -412,10 +370,10 @@ def parse_args():
         action='store_true',
         help="Force use of QuickGELU activation for non-OpenAI transformer models.",
     )
+
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Evaluation
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-    
     parser.add_argument(
         "--eval-first",
         default=False,
@@ -482,18 +440,25 @@ def parse_args():
         help="Don't set device index from local rank (when CUDA_VISIBLE_DEVICES restricted to one per proc)."
     )
     parser.add_argument(
-        "--seed", type=int, default=0, help="Default random seed."
+        "--seed", type=int, default=0, help="Fix random seed."
     )
     
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args() # to be compatible with ELVATER
-    if len(unknown)>0:
-        print(f'Unknow args: {unknown}')
+    if len(unknown) > 0:
+        print(f'[Unknow args]: {unknown}')
 
-    # If some params are not passed, we use the default values based on model name.
     default_params = get_default_params(args.image_model)
     for name, val in default_params.items():
         if getattr(args, name) is None:
             setattr(args, name, val)
+
+    if args.config_yaml is not None:
+        print(f'Loading params from given config yaml file: "{args.config_yaml}"')
+        with open(args.config_yaml, 'r') as f:
+            cfg = yaml.safe_load(f)
+            parser.set_defaults(**cfg)
+
+        args = parser.parse_args(unknown)
 
     return args

@@ -15,12 +15,13 @@ from sentence_transformers import SentenceTransformer
 
 from training.distributed import is_master
 from training.projection import DINOHead
-from training.prompt import Prompt
 import training.transforms
 
 from loss import NEED_LOGIT_SCALE, NEED_PROTOTYPE_LAYER
 from contextlib import suppress
 
+AVALIABLE_TEXT_MODEL_BUILDER = ['openclip', 'chineseclip', 'huggingface', 'sbert']
+AVALIABLE_IMAGE_MODEL_BUILDER = ['openclip', 'chineseclip', 'torchvision', "torchhub"]
 
 def get_model(args):
     logging.info(f'Builing model for rank {args.rank}')
@@ -211,7 +212,7 @@ def get_model(args):
     else:
         raise RuntimeError(f'image model builder "{args.image_model_builder}" is not supported.')
    
-    # Set 'param.required_grad'
+    # Set 'param.required_grad' to implement partial finetune
     for name, param in text_backbone.named_parameters():
         param.requires_grad = False if args.lock_text_model else True
         if args.lock_text_partial != '':
@@ -252,7 +253,7 @@ def get_model(args):
 
 
 class ItraModel(nn.Module):
-    def __init__(self, text_backbone, image_backbone, tokenizer, args, prompt=None) -> None:
+    def __init__(self, text_backbone, image_backbone, tokenizer, args) -> None:
         super().__init__()
         self.device = args.device
         self.text_model = args.text_model
@@ -269,15 +270,25 @@ class ItraModel(nn.Module):
         self.image_model_builder = args.image_model_builder
         self.max_seq_length = args.max_seq_length
             
-        self.image_context = torch.no_grad if (args.lock_image_model and '!' not in args.lock_image_partial) else suppress 
-        self.text_context = torch.no_grad if (args.lock_text_model and '!' not in args.lock_text_partial and args.adapter is None) else suppress
+        self.image_context = torch.no_grad if (
+            args.lock_image_model and 
+            '!' not in args.lock_image_partial
+            ) else suppress 
+            
+        self.text_context = torch.no_grad if (
+            args.lock_text_model and 
+            '!' not in args.lock_text_partial and 
+            args.adapter is None and
+            not args.prompt
+            ) else suppress
         
         if is_master(args):
             logging.info(f'Calculate gradients for image backbone?\t{self.image_context==suppress}')
             logging.info(f'Calculate gradients for text backbone?\t{self.text_context==suppress}')
         
-        # TODO: CoOp text prompt (optional) 
+        # TODO: CoOp text prompt
         if args.prompt:
+            assert args.text_model_builder=='openclip' # CoOp style prompt only supports OpenCLIP models
             self.prompt = nn.Parameter(torch.empty(args.n_prompt, args.text_width))
             torch.nn.init.normal_(self.prompt, std=0.02)
             self.n_prompt = args.n_prompt

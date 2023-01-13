@@ -76,10 +76,10 @@ def train_one_epoch(
         if len(index)!=args.batch_size and args.cache_teacher is None:
             continue  # drop the last incomplete batch if train        
 
-        if args.BYOL:
-            images, images_aug = images
-            images_aug = images_aug.to(device=device, non_blocking=True)
-            MSE = nn.MSELoss()
+        # if args.BYOL:
+        #     images, images_aug = images
+        #     images_aug = images_aug.to(device=device, non_blocking=True)
+        #     MSE = nn.MSELoss()
         if args.cache_teacher is None:
             images = images.to(device=device, non_blocking=True)
         data_time_m.update(time.time() - end)
@@ -100,7 +100,7 @@ def train_one_epoch(
                         w = model_without_ddp.text_projection_head.last_layer.weight_v.data.clone()
                         model_without_ddp.image_projection_head.last_layer.weight_v.data.copy_(w)
 
-                image_features, text_features, logit_scale = model(images, texts, text_only=(args.cache_teacher is not None) or args.w_distill==0)
+                image_features, text_features, logit_scale = model(images, texts, text_only=(args.cache_teacher is not None) or args.w_align==0)
 
                 if args.w_simcse > 0:
                     text_features_2 = model_without_ddp.encode_text(texts, projection=True)
@@ -120,10 +120,10 @@ def train_one_epoch(
                     if args.w_simcse > 0:
                         all_text_features_2 = text_features_2
 
-                if args.BYOL:
-                    image_features_aug = model_without_ddp.encode_image(images_aug, projection=True)
-                    ssl_loss = MSE(image_features_aug, image_features.detach())
-                elif args.w_simcse > 0:
+                # if args.BYOL:
+                #     image_features_aug = model_without_ddp.encode_image(images_aug, projection=True)
+                #     ssl_loss = MSE(image_features_aug, image_features.detach())
+                if args.w_simcse > 0:
                     ssl_loss = args.w_simcse * simcse_contrastive_loss(all_text_features, all_text_features_2, logit_scale=np.exp(2.996))
                 else:
                     ssl_loss = 0
@@ -140,7 +140,7 @@ def train_one_epoch(
                         align_loss = loss(teacher_features, student_features, logit_scale=logit_scale)
                 else:
                     align_loss = loss(teacher_features, student_features)            
-                total_loss = args.w_distill * align_loss + ssl_loss
+                total_loss = args.w_align * align_loss + ssl_loss
         
         if args.cache_teacher is not None:
             # # # # # # # # # # # # # # # # # # 
@@ -204,8 +204,8 @@ def train_one_epoch(
                 
                 # Save train loss / etc. Using non avg meter values as loggers have their own smoothing
                 log_data = {
-                    "loss-distill": align_loss.item(),
-                    "loss-ssl": ssl_loss.item() if args.BYOL or args.w_simcse > 0 else 0,
+                    "loss-align": align_loss.item(),
+                    "loss-ssl": ssl_loss.item() if args.w_simcse > 0 else 0,
                     "learning_rate": optimizer.param_groups[0]["lr"],
                     "gradient-norm": norm,
                     "logit_scale": model.module.logit_scale.item() if args.distributed else model.logit_scale.item()
@@ -214,10 +214,7 @@ def train_one_epoch(
                     "batch data time (s)": data_time_m.val,
                     "bathc total time (s)": batch_time_m.val,
                 }
-            
-                if args.prompt:
-                    log_data['prompt-norm'] = model.module.prompt.norm(dim=1, p=2).mean() if args.distributed else model.prompt.norm(dim=1, p=2).mean() 
-                    
+                  
                 for name, val in log_data.items():
                     name = "training/" + name
                     if writer is not None:

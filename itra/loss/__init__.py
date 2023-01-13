@@ -10,8 +10,14 @@ from .UniCL import UniCLLoss, CrossEntropy
 from .DINO import DINOLoss
 from .SEED import SEED
 from .ProtoCPC import protocpc_loss
-from .ProtoRKD import ProtoRKDLoss
 
+AVALIABLE_LOSS_FUNCTIONS = [
+    'SimReg', 'SimReg-L1' ,'SimReg-SmoothL1',
+    'VICReg', 'BarlowTwins',
+    'RKD','CompRess-1q','CompRess-2q', 'SEED',
+    'InfoNCE', 'UniCL' ,'CrossEntropy',
+    'DINO', 'ProtoCPC'
+    ]
 NEED_LOGIT_SCALE = ['InfoNCE', 'UniCL' ,'CrossEntropy']
 NEED_GATHER = ['InfoNCE', 'UniCL']
 UNI_DIRECTIONAL = ['CompRess-1q', 'SEED', 'DINO', 'ProtoCPC']
@@ -47,8 +53,6 @@ def get_loss(args):
         return DINOLoss
     elif args.loss=='ProtoCPC':
         return protocpc_loss
-    elif args.loss=='ProtoRKD':
-        return ProtoRKDLoss
 
 
 if __name__=='__main__':

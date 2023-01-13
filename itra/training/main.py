@@ -14,7 +14,7 @@ from torch.cuda.amp import GradScaler
 
 from timm.utils import ModelEma
 
-from training.model import get_model
+from model.model import get_model
 from training.distributed import is_master, init_distributed_device, world_info_from_env
 from training.logger import setup_logging, get_exp_name
 from training.params import parse_args
@@ -43,6 +43,7 @@ def random_seed(seed):
 
 def main():
     args = parse_args()
+    print(args)
     random_seed(args.seed)
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -198,7 +199,7 @@ def main():
     if is_master(args):
         model_without_ddp = model.module if args.distributed else model
         named_parameters = list(model.named_parameters())
-        logging.info(f"Prameters to be optimized ↓")
+        logging.info(f"↓ Prameters to be optimized ↓")
         n_trainable_params = 0
         for n, p in named_parameters:
             if p.requires_grad:
@@ -206,7 +207,7 @@ def main():
                 n_trainable_params += p.numel()
         logging.info(f"---")
                 
-        logging.info(f"Prameters NOT to be optimized ↓")
+        logging.info(f"↓ Prameters NOT to be optimized ↓")
         n_frozen_params = 0
         for n, p in named_parameters:
             if not p.requires_grad:
