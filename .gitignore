@@ -5,7 +5,7 @@ features/
 results/
 weights/
 cache/
-data/
+datasets/
 dev/
 vision_benchmark/outputs
 itra/mutual_information
