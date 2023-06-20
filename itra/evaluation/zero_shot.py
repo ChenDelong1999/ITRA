@@ -144,7 +144,7 @@ def zero_shot_eval(model, zeroshot_dataset, epoch, preprocess, args):
 
     #     dataset = torchvision.datasets.ImageFolder(data_path, transform=preprocess)
     
-    dataset = get_dataset(dataset_name=zeroshot_dataset, split='test', root=args.datasets_dir, transform=preprocess)
+    dataset = get_dataset(dataset_name=zeroshot_dataset, split='test', root=args.datasets_dir, transform=preprocess, args=args)
 
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=args.batch_size, num_workers=args.evaluation_workers)
 

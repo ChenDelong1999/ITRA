@@ -220,7 +220,7 @@ def clone_loader(loader, shuffle=True):
     return create_dataloader(
         loader.dataset,
         batch_size=loader.batch_size,
-        shuffle=shuffle,
+        shuffle=False,
         num_workers=loader.num_workers,
         pin_memory=loader.pin_memory,
     )
@@ -452,7 +452,8 @@ def merge_trainval_loader(train_loader, val_loader):
     return create_dataloader(
         fullset,
         batch_size=train_loader.batch_size,
-        shuffle=True,
+        # shuffle=True,
+        shuffle=False,
         num_workers=train_loader.num_workers,
         pin_memory=train_loader.pin_memory,
     )

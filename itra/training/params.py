@@ -1,6 +1,6 @@
 import argparse
 import yaml
-from model.model import AVALIABLE_TEXT_MODEL_BUILDER, AVALIABLE_IMAGE_MODEL_BUILDER
+from model.models import AVALIABLE_TEXT_MODEL_BUILDER, AVALIABLE_IMAGE_MODEL_BUILDER
 from loss import AVALIABLE_LOSS_FUNCTIONS
 
 def get_default_params(model_name):
@@ -10,6 +10,15 @@ def get_default_params(model_name):
         return {"lr": 5.0e-4, "beta1": 0.9, "beta2": 0.98, "eps": 1.0e-6}
     else:
         return {"lr": 5.0e-4, "beta1": 0.9, "beta2": 0.999, "eps": 1.0e-8}
+
+def read_dict(d, parser):
+    d = {key.lower(): value for key, value in d.items()}
+    for key, value in d.items():
+        if isinstance(value, dict):
+            read_dict(value, parser)
+        else:
+            parser.set_defaults(**d)
+
 
 
 def parse_args():
@@ -25,111 +34,112 @@ def parse_args():
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     
     # === text model === #
-    parser.add_argument(
-        "--text-model-builder",choices=AVALIABLE_TEXT_MODEL_BUILDER, type=str, required=True,
-        help="Specify using which libarary to build the text backbone",
-    )  
-    parser.add_argument(
-        "--text-model", type=str, required=True, 
-        help="Name of text backbone. In open_clip.list_models() or hugging face transformers, depend on text-model-builder",
-    )     
-    parser.add_argument(
-        "--text-pooler", type=str, default='cls',
-        help="specify pooling streategy for models built by hugging face",
-    )  
-    parser.add_argument(
-        "--text-model-tag", default='openai', type=str,
-        help="Name of pretrained weights. Use open_clip.list_pretrained_model_tags(your_model) to check available pretrained weights",
-    )  
-    parser.add_argument(
-        "--pretrained-text-model", action="store_true", default=False,
-        help="Load pretrained weights for the text backbone", 
-    )
-    parser.add_argument(
-        "--text-head-n-layers", type=int, default=0,
-        help="how many MLP layers for text projection head",
-    )
-    parser.add_argument(
-        "--max-seq-length", type=int, default=77,
-        help="Maximum sequence length for the text backbone from huggingface. OpenCLIP text models have a default max length of 77.",
-    )
-    parser.add_argument(
-        "--prompt", action="store_true", default=False, 
-        help='Enable CoOp style prompt tuning'
-        )
-    parser.add_argument(
-        "--n-prompt", type=int, default=4, 
-        help='Use how many prompt vector.'
-        )
-    parser.add_argument(
-        "--adapter", type=str, default=None,
-        help="Enable adapter-transformer fine-tuning"
-        )
-    parser.add_argument(
-        "--lock-text-model", action="store_true", default=False,
-        help="Freeze text backbone during training"
-        )
-    parser.add_argument(
-        "--lock-text-partial", type=str, default='',
-        help="list keywords of params names that you want to lock in the text model, seperate by ','. Add '!' at first to do reverse manipulation (partial unfreeze)",
-    )
 
-    # === image model === #
-    parser.add_argument(
-        "--image-model", default='', type=str,
-        help="In open_clip.list_models() or torchvision.models",
-    )    
-    parser.add_argument(
-        "--image-model-tag", default='openai', type=str,
-        help="Name of pretrained weights from OpenCLIP or torchhub",
-    )    
-    parser.add_argument(
-        "--image-model-builder",
-        choices=AVALIABLE_IMAGE_MODEL_BUILDER,
-        help="use which libarary to build the image backbone",
-    ) 
-    parser.add_argument(
-        "--pretrained-image-model", action="store_true", default=False,
-        help="whether load pretrained weigth for the image backbone"
-    )
-    parser.add_argument("--image-resolution", type=int, default=224) 
-    parser.add_argument(
-        "--image-head-n-layers", type=int, default=0,
-        help="how many MLP layers for image projection head",
-    )
-    parser.add_argument(
-        "--lock-image-model", action="store_true", default=False,
-        help="Freeze image backbone during training",
-    )
-    parser.add_argument(
-        "--lock-image-partial", type=str, default='',
-        help="List keywords of params names that you want to lock in the image model, seperate by ','. Add '!' at first to do reverse manipulation (partial unfreeze)",
-    )
+    # parser.add_argument(
+    #     "--text-model-builder",choices=AVALIABLE_TEXT_MODEL_BUILDER, type=str,
+    #     help="Specify using which libarary to build the text backbone",
+    # )
+    # parser.add_argument(
+    #     "--text-model", type=str,
+    #     help="Name of text backbone. In open_clip.list_models() or hugging face transformers, depend on text-model-builder",
+    # )
+    # parser.add_argument(
+    #     "--text-pooler", type=str, default='cls',
+    #     help="specify pooling streategy for model built by hugging face",
+    # )
+    # parser.add_argument(
+    #     "--text-model-tag", default='openai', type=str,
+    #     help="Name of pretrained weights. Use open_clip.list_pretrained_model_tags(your_model) to check available pretrained weights",
+    # )
+    # parser.add_argument(
+    #     "--pretrained-text-model", action="store_true", default=False,
+    #     help="Load pretrained weights for the text backbone",
+    # )
+    # parser.add_argument(
+    #     "--text-head-n-layers", type=int, default=0,
+    #     help="how many MLP layers for text projection head",
+    # )
+    # parser.add_argument(
+    #     "--max-seq-length", type=int, default=77,
+    #     help="Maximum sequence length for the text backbone from huggingface. OpenCLIP text model have a default max length of 77.",
+    # )
+    # parser.add_argument(
+    #     "--prompt", action="store_true", default=False,
+    #     help='Enable CoOp style prompt tuning'
+    #     )
+    # parser.add_argument(
+    #     "--n-prompt", type=int, default=4,
+    #     help='Use how many prompt vector.'
+    #     )
+    # parser.add_argument(
+    #     "--adapter", type=str, default=None,
+    #     help="Enable adapter-transformer fine-tuning"
+    #     )
+    # parser.add_argument(
+    #     "--lock-text-model", action="store_true", default=False,
+    #     help="Freeze text backbone during training"
+    #     )
+    # parser.add_argument(
+    #     "--lock-text-partial", type=str, default='',
+    #     help="list keywords of params names that you want to lock in the text model, seperate by ','. Add '!' at first to do reverse manipulation (partial unfreeze)",
+    # )
+    #
+    # # === image model === #
+    # parser.add_argument(
+    #     "--image-model", default='', type=str,
+    #     help="In open_clip.list_models() or torchvision.model",
+    # )
+    # parser.add_argument(
+    #     "--image-model-tag", default='openai', type=str,
+    #     help="Name of pretrained weights from OpenCLIP or torchhub",
+    # )
+    # parser.add_argument(
+    #     "--image-model-builder",
+    #     choices=AVALIABLE_IMAGE_MODEL_BUILDER,
+    #     help="use which libarary to build the image backbone",
+    # )
+    # parser.add_argument(
+    #     "--pretrained-image-model", action="store_true", default=False,
+    #     help="whether load pretrained weigth for the image backbone"
+    # )
+    # parser.add_argument("--image-resolution", type=int, default=224)
+    # parser.add_argument(
+    #     "--image-head-n-layers", type=int, default=0,
+    #     help="how many MLP layers for image projection head",
+    # )
+    # parser.add_argument(
+    #     "--lock-image-model", action="store_true", default=False,
+    #     help="Freeze image backbone during training",
+    # )
+    # parser.add_argument(
+    #     "--lock-image-partial", type=str, default='',
+    #     help="List keywords of params names that you want to lock in the image model, seperate by ','. Add '!' at first to do reverse manipulation (partial unfreeze)",
+    # )
 
-    # === modality agnositc configurations === #
-    parser.add_argument(
-        "--joint-projection-dim", type=int, default=-1,
-        help="Dimension of projected representations when both image and text backbones have projection head",
-    )
-    parser.add_argument(
-        "--cache-dir",
-        default='cache/weights', 
-        type=str,
-        )
-    parser.add_argument(
-        "--cache-teacher",
-        default=None, 
-        type=str,
-        help='Cache the features from frozen backbone to speedup training. Implementation NOT finished.'
-    )
+    # # === modality agnositc configurations === #
+    # parser.add_argument(
+    #     "--joint-projection-dim", type=int, default=-1,
+    #     help="Dimension of projected representations when both image and text backbones have projection head",
+    # )
+    # parser.add_argument(
+    #     "--cache-dir",
+    #     default='cache/weights',
+    #     type=str,
+    #     )
+    # parser.add_argument(
+    #     "--cache-teacher",
+    #     default=None,
+    #     type=str,
+    #     help='Cache the features from frozen backbone to speedup training. Implementation NOT finished.'
+    # )
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     # Loss Functions
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
     
     parser.add_argument(
         "--loss",
+        default= "InfoNCE",
         type=str,
-        required=True,
         choices=AVALIABLE_LOSS_FUNCTIONS
     )
     parser.add_argument("--w-rkd-d", type=float, default=0.5, help="Loss weight.")
@@ -368,7 +378,7 @@ def parse_args():
         "--force-quick-gelu",
         default=False,
         action='store_true',
-        help="Force use of QuickGELU activation for non-OpenAI transformer models.",
+        help="Force use of QuickGELU activation for non-OpenAI transformer model.",
     )
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -388,15 +398,21 @@ def parse_args():
     parser.add_argument("--C", type=float, default=3.16, help="inverse regularizer for logistic reg (sklearn implementation).")
     parser.add_argument(
         "--linear-prob-mode",
-        choices=["pytorch", "sklearn"],
+        choices=["pytorch", "sklearn", "pytorch-search"],
         default="pytorch",
+        help="Use witch implementation for linear evaluaion"
+    )
+    parser.add_argument(
+        "--linear-prob-setting",
+        choices=["8:2", "1-shot", "2-shot", "4-shot", "8-shot", "16-shot", "1-shot"],
+        default="8:2",
         help="Use witch implementation for linear evaluaion"
     )
     parser.add_argument(
         "--torchscript",
         default=False,
         action='store_true',
-        help="torch.jit.script the model, also uses jit version of OpenAI models if pretrained=='openai'",
+        help="torch.jit.script the model, also uses jit version of OpenAI model if pretrained=='openai'",
     )
     parser.add_argument(
         "--trace",
@@ -442,23 +458,32 @@ def parse_args():
     parser.add_argument(
         "--seed", type=int, default=0, help="Fix random seed."
     )
-    
+
+
+
     # args = parser.parse_args()
     args, unknown = parser.parse_known_args() # to be compatible with ELVATER
+
+
+
     if len(unknown) > 0:
         print(f'[Unknow args]: {unknown}')
 
-    default_params = get_default_params(args.image_model)
-    for name, val in default_params.items():
-        if getattr(args, name) is None:
-            setattr(args, name, val)
+
 
     if args.config_yaml is not None:
         print(f'Loading params from given config yaml file: "{args.config_yaml}"')
         with open(args.config_yaml, 'r') as f:
             cfg = yaml.safe_load(f)
-            parser.set_defaults(**cfg)
+            # print(**cfg)
+            read_dict(cfg['MODEL']['SPEC'], parser)
+            # parser.set_defaults(**cfg)
 
-        args = parser.parse_args(unknown)
+        args = parser.parse_args(namespace = args)
 
+    default_params = get_default_params(args.image_model)
+    for name, val in default_params.items():
+        if getattr(args, name) is None:
+            setattr(args, name, val)
+    # print(args)
     return args

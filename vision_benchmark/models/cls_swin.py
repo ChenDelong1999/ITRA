@@ -458,7 +458,7 @@ class PatchEmbed(nn.Module):
         B, C, H, W = x.shape
         # FIXME look at relaxing size constraints
         assert H == self.img_size[0] and W == self.img_size[1], \
-            f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+            f"Input image size ({H}*{W}) doesn't match models ({self.img_size[0]}*{self.img_size[1]})."
         x = self.proj(x).flatten(2).transpose(1, 2)  # B Ph*Pw C
         if self.norm is not None:
             x = self.norm(x)
@@ -572,11 +572,11 @@ class SwinTransformer(nn.Module):
 
     def init_weights(self, pretrained='', pretrained_layers=[], verbose=True):
         if not os.path.isfile(pretrained):
-            logger.warning(f'=> Pretrained model ({pretrained}) is not a file, skip init weight')
+            logger.warning(f'=> Pretrained models ({pretrained}) is not a file, skip init weight')
             return
 
         pretrained_dict = torch.load(pretrained, map_location='cpu')
-        logger.info(f'=> Loading pretrained model {pretrained}')
+        logger.info(f'=> Loading pretrained models {pretrained}')
         model_dict = self.state_dict()
         pretrained_dict = {
             k: v for k, v in pretrained_dict.items()

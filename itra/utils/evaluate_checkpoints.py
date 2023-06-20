@@ -8,7 +8,7 @@ from evaluation.evaluation import evaluate
 import logging
 import matplotlib.pyplot as plt
 #from openTSNE import TSNE
-from model.model import get_model
+from model.models import get_model
 
 # to disable warning "huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks..."
 os.environ["TOKENIZERS_PARALLELISM"] = "false"

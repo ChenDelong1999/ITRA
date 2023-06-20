@@ -11,7 +11,7 @@ class CLIPLoss(nn.Module):
         self.prev_num_logits = 0
         self.labels = {}
 
-    def forward(self, text_features, image_features, logit_scale=2.659):
+    def forward(self, text_features, image_features, logit_scale=2.659, output_dict = False):
         
         image_features = F.normalize(image_features, dim=-1)
         text_features = F.normalize(text_features, dim=-1)
@@ -31,5 +31,5 @@ class CLIPLoss(nn.Module):
             F.cross_entropy(logits_per_image, labels) +
             F.cross_entropy(logits_per_text, labels)
             ) / 2
-        return total_loss
+        return {"contrastive_loss": total_loss} if output_dict else total_loss
 

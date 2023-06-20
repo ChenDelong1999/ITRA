@@ -23,3 +23,15 @@ from . import StanfordCars
 from . import STL10
 from . import SUN397
 from . import UCF101
+from . import PatternNet
+from . import OPTIMAL31
+from . import RSC11
+from . import AID
+from . import MLRSNet
+from . import RESISC45
+from . import RSICB128
+from . import WHURS19
+from . import RSICB256
+from . import UCMerced
+from . import WHUearth
+from . import RS2800

@@ -9,7 +9,7 @@ from .retrieval import retrieval_evaluation
 # from .sts_evaluation import sts_benchmark
 from .nlp_evaluations import nlp_eval
 from .wise_ft import get_wise_ft_model
-
+os.listdir()
 try:
     import wandb
 except ImportError:
@@ -31,8 +31,9 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None):
         distributed = args.distributed
         args.distributed = False
     
-    linear_eval_datasets = ['CIFAR10']
-    zeroshot_datasets = ['ImageNet']
+    linear_eval_datasets = ['PatternNet','EuroSAT','OPTIMAL31','RSC11','AID', 'MLRSNet','RSICB128','RSICB256','RESISC45','SIRIWHU','WHURS19','RS2800']
+    #
+    zeroshot_datasets = ['PatternNet', 'EuroSAT', 'OPTIMAL31', 'RSC11', 'AID', 'MLRSNet', 'RSICB128', 'RSICB256', 'RESISC45', 'WHUearth', 'WHURS19', 'RS2800']
     args.evaluation_workers = 8
 
     # zeroshot_datasets= [
@@ -152,6 +153,12 @@ def evaluate(model, epoch, preprocess, args, tb_writer=None):
         all_metrics.update(linear_metrics)
 
     logging.info( f"Finished evaluation of [{args.name}] at epoch {epoch}\n" + "\n".join([f"\t{k}\t{v}" for k, v in all_metrics.items()]))
+
+    # sum = 0
+    # for k, v in all_metrics.items():
+    #     sum += v
+    #
+    # logging.info(f"Zero-shot Average {sum/len(all_metrics)} \n")
 
     for name, val in metrics.items():
         if tb_writer is not None:

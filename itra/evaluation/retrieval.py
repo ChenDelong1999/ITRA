@@ -28,7 +28,7 @@ class CsvDataset(Dataset):
         elif 'rsicd' in input_filename:
             df = pd.read_csv(input_filename, sep=sep, encoding='gb18030')
         else:
-            df = pd.read_csv(input_filename, sep=sep)
+            df = pd.read_csv(input_filename, sep=sep, encoding='gbk')
         
         self.nori_dataset = nori_dataset
         self.f = None
@@ -55,7 +55,7 @@ class CsvDataset(Dataset):
             image = Image.open(io.BytesIO(self.f.get(self.images[index])))
         else:
             image = Image.open(os.path.join(self.images_dir, str(self.images[index])))
-        
+
         image = self.transforms(image)
         
         return image, texts
@@ -131,7 +131,7 @@ def retrieval_evaluation(model, epoch, preprocess, args, recall_k_list=[1,5,10])
             img_key=args.retrieval_csv_img_key,
             caption_key=args.retrieval_csv_caption_key,
             sep=args.retrieval_csv_separator,
-            nori_dataset=args.retrieval_nori_dataset,
+            # nori_dataset=args.retrieval_nori_dataset,
             images_dir=os.path.join(args.datasets_dir, args.retrieval_images_dir)
         )
 

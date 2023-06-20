@@ -18,8 +18,8 @@ import numpy as np
 from sklearn.metrics import mean_squared_error
 from scipy.stats import pearsonr, spearmanr
 
-from senteval.tools.relatedness import RelatednessPytorch
-from senteval.tools.validation import SplitClassifier
+from evaluation.SentEval.senteval.tools.relatedness import RelatednessPytorch
+from evaluation.SentEval.senteval.tools.validation import SplitClassifier
 
 class SICKEval(object):
     def __init__(self, task_path, seed=1111):

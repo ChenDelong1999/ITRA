@@ -5,10 +5,8 @@ import os
 import time
 import logging
 import pickle
-import numpy as np
-import sys, json
+import json
 
-from sklearn.model_selection import train_test_split
 import timm
 from tqdm import tqdm
 import torch
@@ -17,8 +15,6 @@ from torch.utils.data import Dataset, Subset
 from torchvision import transforms
 import torchvision.models
 import torchvision.datasets
-import torch.nn.functional as F
-from .metric import get_metric
 
 from ..common.constants import get_dataset_hub, VISION_DATASET_STORAGE
 
@@ -29,15 +25,12 @@ from PIL import Image
 from PIL import ImageFile
 
 from vision_datasets import ManifestDataset
-from nltk.corpus import wordnet as wn
 import nltk
 from nltk.tokenize import word_tokenize
 from nltk.corpus import wordnet as wn
 
 nltk.download('punkt')
 nltk.download('wordnet')
-
-import pdb
 
 from collections import Counter
 import math
@@ -73,7 +66,7 @@ class FeatureData(Dataset):
         return self.X[idx, :], self.y[idx]
 
 
-def create_dataloader(dataset, batch_size, shuffle=True, num_workers=6, pin_memory=True):
+def create_dataloader(dataset, batch_size, shuffle=False, num_workers=6, pin_memory=True):
     def seed_worker(worker_id):
         # worker_seed = torch.initial_seed() % 2**32
         worker_seed = worker_id
@@ -87,7 +80,8 @@ def create_dataloader(dataset, batch_size, shuffle=True, num_workers=6, pin_memo
     loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,
-        shuffle=shuffle,
+        # shuffle=shuffle,
+        shuffle=False,
         num_workers=num_workers,
         pin_memory=pin_memory,
         sampler=None,
@@ -175,14 +169,15 @@ def get_dataloader(dataset, val_split=0.0, batch_size_per_gpu=64, workers=6, pin
         train_loader = create_dataloader(
             datasets['train'],
             batch_size=batch_size_per_gpu,
-            shuffle=True,
+            # shuffle=True,
+            shuffle=False,
             num_workers=workers,
             pin_memory=pin_memory
         )
         val_loader = create_dataloader(
             datasets['val'],
             batch_size=batch_size_per_gpu,
-            shuffle=False,
+            shuffle=False, # 好像本来就是False
             num_workers=workers,
             pin_memory=pin_memory
         )
@@ -246,7 +241,7 @@ def load_custom_zeroshot_model(config):
 def get_model(config, feature_type='image'):
     model_name = config.MODEL.NAME
     if model_name in dir(torchvision.models):
-        model_pretrained = eval('torchvision.models.' + model_name)(pretrained=True)
+        model_pretrained = eval('torchvision.model.' + model_name)(pretrained=True)
         model = EvalModel(model_pretrained)
         logging.info(f'Using Pytorch pretrained model {model_name}')
     elif model_name in timm.list_models(pretrained=True):

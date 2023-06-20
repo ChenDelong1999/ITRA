@@ -205,7 +205,7 @@ class CLIP(nn.Module):
     def init_weights(self, pretrained='', pretrained_layers=[], verbose=True):
         if os.path.isfile(pretrained):
             pretrained_dict = torch.load(pretrained, map_location='cpu')
-            logger.info(f'=> loading pretrained model {pretrained}')
+            logger.info(f'=> loading pretrained models {pretrained}')
             model_dict = self.state_dict()
             pretrained_dict = {
                 k: v for k, v in pretrained_dict.items()

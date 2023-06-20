@@ -5,9 +5,10 @@ import torch.nn as nn
 import numpy as np
 from sklearn.linear_model import LogisticRegression as sklearnLogisticRegression
 from torch.utils.data import DataLoader
-from data.classification_datasets import get_dataset
+
 from tqdm import tqdm
 import logging
+from data.classification_datasets import get_dataset
 
 def logistic_regression_pytorch(train_features, train_labels, test_features, test_labels, total_epochs=100, lr=0.004, weight_decay=0, batch_size=1024):
     
@@ -69,8 +70,8 @@ def logistic_regression_pytorch(train_features, train_labels, test_features, tes
 
     train_dataset = TensorDataset(torch.Tensor(train_features), torch.Tensor(train_labels).long())
     val_dataset = TensorDataset(torch.Tensor(test_features), torch.Tensor(test_labels).long())
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=4, pin_memory=True, persistent_workers=True)
-    val_loader = DataLoader(val_dataset, batch_size=5000, num_workers=4, pin_memory=True, persistent_workers=True)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, num_workers=0, pin_memory=True, persistent_workers=False)
+    val_loader = DataLoader(val_dataset, batch_size=5000, num_workers=0, pin_memory=True, persistent_workers=False)
     
     
     num_labels = int(max(train_labels)+1)
@@ -204,8 +205,8 @@ def get_dataset_features(model, dataset_name, root, preprocess, args):
     #     train = ImageFolder(f'{args.datasets_dir}/{dataset_name}/train', transform=preprocess)
     #     test = ImageFolder(f'{args.datasets_dir}/{dataset_name}/test', transform=preprocess)
 
-    train = get_dataset(dataset_name=dataset_name, split='train', root=args.datasets_dir, transform=preprocess)
-    test = get_dataset(dataset_name=dataset_name, split='test', root=args.datasets_dir, transform=preprocess)
+    train = get_dataset(dataset_name=dataset_name, split='train', root=args.datasets_dir, transform=preprocess, args=args)
+    test = get_dataset(dataset_name=dataset_name, split='test', root=args.datasets_dir, transform=preprocess, args=args)
 
         
     # Calculate the image features
@@ -249,8 +250,9 @@ def get_linear_eval_acc(train_features, train_labels, test_features, test_labels
     elif args.linear_prob_mode=='pytorch' or 'ImageNet':
         logging.info('Runing pytorch-based logistic regression')
         accuracy = logistic_regression_pytorch(
-            train_features, train_labels, test_features, test_labels, 
-            #total_epochs=500, lr=0.2, weight_decay=1e-5, batch_size=10000
+            train_features, train_labels, test_features, test_labels,
+            total_epochs=1000, lr=0.8, weight_decay=4e-5, batch_size=10000
+            # total_epochs=500, lr=0.2, weight_decay=1e-5, batch_size=10000
             )
         
     elif args.linear_prob_mode=='pytorch-search':
@@ -258,9 +260,12 @@ def get_linear_eval_acc(train_features, train_labels, test_features, test_labels
         accuracies = []
         for _ in range(5):
             lr = 10 ** (-np.random.randint(low=1, high=3)) * np.random.randint(low=1, high=9)
+            # lr = 10 ** (-np.random.randint(low=1, high=3)) * 1
             weight_decay = 10 ** (-np.random.randint(low=5, high=10)) * np.random.randint(low=1, high=9)
             logging.info(f'Runing pytorch-based logistic regression with random hyper-parameters: lr={lr}, wd={weight_decay}')
-            accuracy = logistic_regression_pytorch(train_features, train_labels, test_features, test_labels, total_epochs=500, lr=lr, weight_decay=weight_decay, batch_size=10000)
+            # accuracy = logistic_regression_pytorch(train_features, train_labels, test_features, test_labels, total_epochs=500, lr=lr, weight_decay=weight_decay, batch_size=10000)
+            accuracy = logistic_regression_pytorch(train_features, train_labels, test_features, test_labels,
+                                                   total_epochs=2000, lr=lr, weight_decay=weight_decay, batch_size=10000)
             logging.info(f'Accuracy={accuracy}')
             accuracies.append(accuracy)
         accuracy = max(accuracies)
@@ -300,7 +305,7 @@ def linear_eval(model, dataset_names, epoch, preprocess, args):
     for dataset_name in dataset_names:
         logging.info(f'starting linear evaluation on {dataset_name}...')
         train_features, train_labels, test_features, test_labels = get_dataset_features(model, dataset_name, args.datasets_dir, preprocess, args)
-        
+
         if args.linear_prob_mode=='ImageNet':
             knn_acc = get_knn_acc(train_features, train_labels, test_features, test_labels, args)
             results[f'{dataset_name}-knn-eval-acc'] = knn_acc
@@ -309,14 +314,30 @@ def linear_eval(model, dataset_names, epoch, preprocess, args):
 
         if dataset_name in SKLEARN_LINEAR_C.keys():
             args.C = SKLEARN_LINEAR_C[dataset_name]
-        linear_acc = get_linear_eval_acc(train_features, train_labels, test_features, test_labels, args)
-        results[f'{dataset_name}-linear-eval-acc'] = linear_acc
-        logging.info(f'Finished linear evaluation on  {dataset_name} accuracy: {linear_acc}')
-        
-        if dataset_name != 'ImageNet':
-            knn_acc = get_knn_acc(train_features, train_labels, test_features, test_labels, args)
-            results[f'{dataset_name}-knn-eval-acc'] = knn_acc
-            logging.info(f'Finished K-NN evaluation on  {dataset_name}, accuracy: {knn_acc}')
+
+        if args.linear_prob_setting == "8:2":
+
+            linear_acc = get_linear_eval_acc(train_features, train_labels, test_features, test_labels, args)
+            results[f'{dataset_name}-linear-eval-acc'] = linear_acc
+            logging.info(f'Finished linear evaluation on  {dataset_name} ,accuracy: {linear_acc}')
+            if dataset_name != 'ImageNet':
+                knn_acc = get_knn_acc(train_features, train_labels, test_features, test_labels, args)
+                results[f'{dataset_name}-knn-eval-acc'] = knn_acc
+                logging.info(f'Finished K-NN evaluation on  {dataset_name}, accuracy: {knn_acc}')
+
+        else:
+            total_linear_acc = 0
+            times = 5
+            for i in range(times):
+                train_features, train_labels, test_features, test_labels = get_dataset_features(model, dataset_name, args.datasets_dir, preprocess, args)
+
+                linear_acc = get_linear_eval_acc(train_features, train_labels, test_features, test_labels, args)
+                total_linear_acc += linear_acc
+                logging.info(f'This is {i+1} linear evaluation on {dataset_name}, accuracy:{linear_acc}')
+
+            average_linear_acc = total_linear_acc / times
+            results[f'{dataset_name}-linear-eval-acc'] = average_linear_acc
+            logging.info(f'Finished linear evaluation on  {dataset_name} ,{times} average accuracy: {average_linear_acc}')
 
     return results
 

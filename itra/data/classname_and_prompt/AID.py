@@ -1,0 +1,42 @@
+new_classes = {
+    "Airport": "airport",
+    "DenseResidential": "dense residential",
+    "Park": "park",
+    "School": "school",
+    "BareLand": "bareLand",
+    "Desert": "desert",
+    "Parking": "parking",
+    "SparseResidential": "sparse residential",
+    "BaseballField": "baseball field",
+    "Farmland": "farmland",
+    "Playground": "playground",
+    "Square": "square",
+    "Beach": "beach",
+    "Forest": "forest",
+    "Pond": "pond",
+    "Stadium": "stadium",
+    "Bridge": "bridge",
+    "Industrial": "industrial",
+    "Port": "port",
+    "StorageTanks": "storage tanks",
+    "Center": "center",
+    "Meadow": "meadow",
+    "RailwayStation": "railway station",
+    "Viaduct": "viaduct",
+    "Church": "church",
+    "MediumResidential": "medium residential",
+    "Resort": "resort",
+    "Commercial": "commercial",
+    "Mountain": "mountain",
+    "River": "river",
+}
+classes = list(new_classes.values())
+file_class_names = list(new_classes.keys())
+
+templates = [
+    'a centered satellite photo of a {}.',
+    'a centered satellite photo of the {} taken from above.',
+    'an overhead view of the {}.',
+    'an overhead view of a {}.',
+    'an overhead view of {}.',
+]

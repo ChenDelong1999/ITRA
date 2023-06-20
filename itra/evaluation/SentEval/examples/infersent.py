@@ -6,7 +6,7 @@
 #
 
 """
-InferSent models. See https://github.com/facebookresearch/InferSent.
+InferSent model. See https://github.com/facebookresearch/InferSent.
 """
 
 from __future__ import absolute_import, division, unicode_literals

@@ -12,16 +12,16 @@ Generic sentence evaluation scripts wrapper
 '''
 from __future__ import absolute_import, division, unicode_literals
 
-from senteval import utils
-from senteval.binary import CREval, MREval, MPQAEval, SUBJEval
-from senteval.snli import SNLIEval
-from senteval.trec import TRECEval
-from senteval.sick import SICKEntailmentEval, SICKEval
-from senteval.mrpc import MRPCEval
-from senteval.sts import STS12Eval, STS13Eval, STS14Eval, STS15Eval, STS16Eval, STSBenchmarkEval, SICKRelatednessEval, STSBenchmarkFinetune
-from senteval.sst import SSTEval
-from senteval.rank import ImageCaptionRetrievalEval
-from senteval.probing import *
+from evaluation.SentEval.senteval import utils
+from evaluation.SentEval.senteval.binary import CREval, MREval, MPQAEval, SUBJEval
+from evaluation.SentEval.senteval.snli import SNLIEval
+from evaluation.SentEval.senteval.trec import TRECEval
+from evaluation.SentEval.senteval.sick import SICKEntailmentEval, SICKEval
+from evaluation.SentEval.senteval.mrpc import MRPCEval
+from evaluation.SentEval.senteval.sts import STS12Eval, STS13Eval, STS14Eval, STS15Eval, STS16Eval, STSBenchmarkEval, SICKRelatednessEval, STSBenchmarkFinetune
+from evaluation.SentEval.senteval.sst import SSTEval
+from evaluation.SentEval.senteval.rank import ImageCaptionRetrievalEval
+from evaluation.SentEval.senteval.probing import *
 
 class SE(object):
     def __init__(self, params, batcher, prepare=None):

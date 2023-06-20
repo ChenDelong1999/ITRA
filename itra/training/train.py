@@ -1,14 +1,13 @@
-import json
 import logging
 import math
-import os
+
 import time
 from contextlib import suppress
 
 import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+
 
 try:
     import wandb
@@ -72,14 +71,15 @@ def train_one_epoch(
         index, images, texts, labels = batch
         all_labels = get_gathered_item(labels.cuda(), args)
         all_index = get_gathered_item(index.cuda(), args)
-        
+
         if len(index)!=args.batch_size and args.cache_teacher is None:
-            continue  # drop the last incomplete batch if train        
+            continue  # drop the last incomplete batch if train
 
         # if args.BYOL:
         #     images, images_aug = images
         #     images_aug = images_aug.to(device=device, non_blocking=True)
         #     MSE = nn.MSELoss()
+
         if args.cache_teacher is None:
             images = images.to(device=device, non_blocking=True)
         data_time_m.update(time.time() - end)
@@ -87,9 +87,9 @@ def train_one_epoch(
         if model_ema is not None:
             model_ema.update(model)
 
-        # # # # # # # # # # # # # # # # # # 
+        # # # # # # # # # # # # # # # # # #
         # model forward
-        # # # # # # # # # # # # # # # # # # 
+        # # # # # # # # # # # # # # # # # #
         with autocast():
             with forward_context():
                 if args.loss in NEED_PROTOTYPE_LAYER:
@@ -100,16 +100,19 @@ def train_one_epoch(
                         w = model_without_ddp.text_projection_head.last_layer.weight_v.data.clone()
                         model_without_ddp.image_projection_head.last_layer.weight_v.data.copy_(w)
 
+                # if args.image_model_builder=='satvit':
+                #     batch_ins = rearrange(batch, 'b c (h i) (w j) -> b (h w) (c i j)', i=16, j=16)  # (bsz, 256, in_dim)
+                #     images = model.linear_input(batch_ins) + model.pos_embed  # (bsz, 256, encoder_dim)
                 image_features, text_features, logit_scale = model(images, texts, text_only=(args.cache_teacher is not None) or args.w_align==0)
 
                 if args.w_simcse > 0:
                     text_features_2 = model_without_ddp.encode_text(texts, projection=True)
-                    
+
                 # gather features
                 if args.distributed and args.loss in NEED_GATHER:
                     all_image_features, all_text_features = gather_features(
                         image_features, text_features,
-                        args.local_loss, args.gather_with_grad, 
+                        args.local_loss, args.gather_with_grad,
                         args.rank, args.world_size, args.horovod
                         )
                     if args.w_simcse > 0:
@@ -127,25 +130,27 @@ def train_one_epoch(
                     ssl_loss = args.w_simcse * simcse_contrastive_loss(all_text_features, all_text_features_2, logit_scale=np.exp(2.996))
                 else:
                     ssl_loss = 0
-                
-                if args.teacher=='text':
-                    teacher_features, student_features = all_text_features, all_image_features
-                elif args.teacher=='image':
-                    teacher_features, student_features = all_image_features, all_text_features
-                
+
+                # if args.teacher=='text':
+                #     teacher_features, student_features = all_text_features, all_image_features
+                # elif args.teacher=='image':
+                #     teacher_features, student_features = all_image_features, all_text_features
+                teacher_features, student_features = all_image_features, all_text_features
                 if args.loss in NEED_LOGIT_SCALE:
                     if args.loss in ['UniCL', 'CrossEntropy']:
-                        align_loss = loss(teacher_features, student_features, logit_scale=logit_scale, labels=all_labels)
+                        align_loss = loss(teacher_features, student_features, logit_scale=logit_scale, labels=all_labels, output_dict = True)
                     else:
-                        align_loss = loss(teacher_features, student_features, logit_scale=logit_scale)
+                        align_loss = loss(teacher_features, student_features, logit_scale=logit_scale, output_dict = True)
                 else:
-                    align_loss = loss(teacher_features, student_features)            
+                    align_loss = loss(teacher_features, student_features)
+                    # sum(args.w_align.values())
+                align_loss = sum(align_loss.values())
                 total_loss = args.w_align * align_loss + ssl_loss
-        
+
         if args.cache_teacher is not None:
-            # # # # # # # # # # # # # # # # # # 
+            # # # # # # # # # # # # # # # # # #
             # cache teacher
-            # # # # # # # # # # # # # # # # # # 
+            # # # # # # # # # # # # # # # # # #
             if is_master(args):
                 cacher.load_batch(all_index, all_text_features)
 
@@ -161,10 +166,10 @@ def train_one_epoch(
                         f"index: {all_index.size()} "
                         f"features: {all_text_features.size()} "
                     )
-        else:                
-            # # # # # # # # # # # # # # # # # # 
+        else:
+            # # # # # # # # # # # # # # # # # #
             # loss backward
-            # # # # # # # # # # # # # # # # # # 
+            # # # # # # # # # # # # # # # # # #
             if scaler is not None:
                 scaler.scale(total_loss).backward()
                 scaler.unscale_(optimizer)
@@ -201,7 +206,7 @@ def train_one_epoch(
                     f"LR: {optimizer.param_groups[0]['lr']:3f} "
                     f"grad: {norm:1f} "
                 )
-                
+
                 # Save train loss / etc. Using non avg meter values as loggers have their own smoothing
                 log_data = {
                     "loss-align": align_loss.item(),
@@ -214,7 +219,7 @@ def train_one_epoch(
                     "batch data time (s)": data_time_m.val,
                     "bathc total time (s)": batch_time_m.val,
                 }
-                  
+
                 for name, val in log_data.items():
                     name = "training/" + name
                     if writer is not None:
@@ -234,6 +239,7 @@ def train_one_epoch(
                 # resetting batch / data time meters per log window
                 batch_time_m.reset()
                 data_time_m.reset()
+
 
     
     if args.cache_teacher is not None:

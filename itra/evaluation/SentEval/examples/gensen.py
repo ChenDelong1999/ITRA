@@ -39,12 +39,12 @@ def batcher(params, batch):
 
 # Load GenSen model
 gensen_1 = GenSenSingle(
-    model_folder='../data/models',
+    model_folder='../data/model',
     filename_prefix='nli_large_bothskip',
     pretrained_emb='../data/embedding/glove.840B.300d.h5'
 )
 gensen_2 = GenSenSingle(
-    model_folder='../data/models',
+    model_folder='../data/model',
     filename_prefix='nli_large_bothskip_parse',
     pretrained_emb='../data/embedding/glove.840B.300d.h5'
 )

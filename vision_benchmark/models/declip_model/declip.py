@@ -143,7 +143,7 @@ class DECLIP(CLIP):
         self.forward_type = forward_type
         #import gensim
         #from textaugment import Word2vec
-        #model = gensim.models.KeyedVectors.load_word2vec_format('/mnt/cache/liyangguang/GoogleNews-vectors-negative300.bin.gz', binary=True)
+        #model = gensim.model.KeyedVectors.load_word2vec_format('/mnt/cache/liyangguang/GoogleNews-vectors-negative300.bin.gz', binary=True)
         #self.word2vec = Word2vec(model=model)
         from textaugment import EDA
         self.emd = EDA()

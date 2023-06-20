@@ -15,7 +15,7 @@ import os
 import numpy as np
 import logging
 
-from senteval.tools.validation import InnerKFoldClassifier
+from evaluation.SentEval.senteval.tools.validation import InnerKFoldClassifier
 
 
 class BinaryClassifierEval(object):

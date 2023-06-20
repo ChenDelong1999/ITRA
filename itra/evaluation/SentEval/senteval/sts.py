@@ -19,8 +19,8 @@ import logging
 
 from scipy.stats import spearmanr, pearsonr
 
-from senteval.utils import cosine
-from senteval.sick import SICKEval
+from evaluation.SentEval.senteval.utils import cosine
+from evaluation.SentEval.senteval.sick import SICKEval
 import warnings
 warnings.filterwarnings("ignore")
 

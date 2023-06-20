@@ -1,0 +1,75 @@
+# GPUS: (0,)
+OUTPUT_DIR: '../../OUTPUT/REMOTECLIP_VIT_LARGE_PATCH14_224/'
+
+INPUT:
+  MEAN: [0.48145466, 0.4578275, 0.40821073]
+  STD: [0.26862954, 0.26130258, 0.27577711]
+
+MODEL:
+  NAME: 'RemoteCLIP_ViT_L_14'
+  NUM_PARAMS_IN_M: 427.62
+  AUTHOR: 'RemoteCLIP'
+  PRETRAINED_DATA: 'Ret-3,Det-10,Seg-7'
+  CREATION_TIME: '2023-06-08'
+  SPEC:
+    VISION:
+      ##### parameters can be modified in the visual model ######
+      IMAGE_MODEL: "ViT-L-14"
+      PRETRAINED_TEXT_MODEL: true
+      IMAGE_MODEL_BUILDER: 'remoteclip'
+      IMAGE_MODEL_TAG: 'openai'
+      IMAGE_HEAD_N_LAYERS: 0
+      LOCK_IMAGE_MODEL: false
+      LOCK_IMAGE_PARTIAL: ''
+      IMAGE_RESOLUTION: 224
+      ###########################################################
+      PATCH_SIZE: 32
+      WIDTH: 768
+      LAYERS: 12
+
+      TEXT:
+        ##### parameters can be modified in the text model ######
+        TEXT_MODEL: "ViT-L-14"
+        PRETRAINED_IMAGE_MODEL: true
+        TEXT_MODEL_BUILDER: 'remoteclip'
+        TEXT_MODEL_TAG: 'openai'
+        TEXT_HEAD_N_LAYERS: 0
+        LOCK_TEXT_MODEL: false
+        LOCK_TEXT_PARTIAL: ''
+        TEXT_POOLER: 'cls'
+        PROMPT: false
+        N_PROMPT: 4
+        adapter: null
+        MAX_SEQ_LENGTH: 77
+        ###########################################################
+
+        VOCAB_SIZE: 49408
+        WIDTH: 768
+        HEADS: 12
+        LAYERS: 12
+
+      AGNOSITC_CONFIG:
+        JOINT_PROJECTION_DIM: -1
+        PTH_NAME: 'RemoteCLIP_vitl14.pt'
+        CACHE_DIR: 'cache/weights'
+        CACHE_TEACHER: null
+
+
+
+TEST:
+  BATCH_SIZE_PER_GPU: 128
+  MODEL_FILE: ''
+
+TRAIN:
+  BATCH_SIZE_PER_GPU: 28
+  BEGIN_EPOCH: 0
+  END_EPOCH: 3
+  EXTRA_FINAL_TRAIN_EPOCH: 40
+  OPTIMIZER: adam
+  WD: 0.
+  MOMENTUM: 0.9
+  NESTEROV: false
+  SHUFFLE: true
+  LR_SCHEDULER:
+    METHOD: 'WarmupCosine'
+    WARMUP_EPOCH: 1000

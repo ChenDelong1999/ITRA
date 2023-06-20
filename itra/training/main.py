@@ -1,4 +1,3 @@
-
 import time
 import logging
 import os
@@ -8,13 +7,15 @@ import yaml
 import wandb
 import torch.utils.tensorboard as tensorboard
 
+import argparse
+
 import torch
 import torch.distributed as dist
 from torch.cuda.amp import GradScaler
 
 from timm.utils import ModelEma
 
-from model.model import get_model
+from model.models import get_model
 from training.distributed import is_master, init_distributed_device, world_info_from_env
 from training.logger import setup_logging, get_exp_name
 from training.params import parse_args
@@ -41,9 +42,9 @@ def random_seed(seed):
     random.seed(seed)
 
 
+
 def main():
     args = parse_args()
-    print(args)
     random_seed(args.seed)
 
     # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -148,6 +149,8 @@ def main():
             logging.info("Using EMA with decay = %.8f" % args.model_ema_decay)
 
     # Convert to sync BN and model DDP
+    print("args.distributed", args.distributed)
+    print("not args.horovod", not args.horovod)
     if args.distributed and not args.horovod:
         if args.use_bn_sync:
             model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
@@ -232,7 +235,8 @@ def main():
     if args.resume is not None:
         if os.path.isfile(args.resume):
             logging.info(f"=> loading checkpoint from '{args.resume}'...")
-            checkpoint = torch.load(args.resume, map_location=device)
+            # checkpoint = torch.load(args.resume, map_location=device)
+            checkpoint = torch.load(args.resume, map_location='cpu')
             if 'epoch' in checkpoint:
                 # resuming a train checkpoint w/ epoch and optimizer state
                 start_epoch = checkpoint["epoch"]
@@ -303,15 +307,15 @@ def main():
 
         start = time.time()
         train_one_epoch(
-            model=model, 
+            model=model,
             model_ema=model_ema,
-            data=data, 
-            epoch=epoch, 
-            optimizer=optimizer, 
-            scaler=scaler, 
-            scheduler=scheduler,  
-            loss=loss, 
-            args=args, 
+            data=data,
+            epoch=epoch,
+            optimizer=optimizer,
+            scaler=scaler,
+            scheduler=scheduler,
+            loss=loss,
+            args=args,
             writer=writer
             )
 

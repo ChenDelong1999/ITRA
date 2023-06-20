@@ -1,4 +1,4 @@
-"""The lightly.models.modules package provides reusable modules.
+"""The lightly.model.modules package provides reusable modules.
 
 This package contains reusable modules such as the NNmemoryBankModule which
 can be combined with any lightly model.

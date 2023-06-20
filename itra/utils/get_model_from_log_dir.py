@@ -3,7 +3,7 @@ import torch
 from training.params import parse_args
 import argparse
 import logging
-from model.model import get_model
+from model.models import get_model
 # logger = logging.getLogger('mylogger') 
 
 # to disable warning "huggingface/tokenizers: The current process just got forked, after parallelism has already been used. Disabling parallelism to avoid deadlocks..."

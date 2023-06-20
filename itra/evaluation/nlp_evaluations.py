@@ -22,11 +22,11 @@ import os
 import tarfile
 from scipy.stats import pearsonr, spearmanr
 from utils.captioned_imagenet import CaptionedImageNet
-# from senteval import engine
+from evaluation.SentEval.senteval import engine
 
-PATH_TO_SENTEVAL = 'itra/evaluation/SentEval'
+PATH_TO_SENTEVAL = '../itra/evaluation/SentEval'
 sys.path.insert(0, PATH_TO_SENTEVAL)
-import senteval
+# import itra.evaluation.SentEval.senteval
 
 autocast = torch.cuda.amp.autocast
 
@@ -162,7 +162,7 @@ def sts12_sts16_eval(model, args):
     logging.info(f'Starting SemEval on {tasks}')
     results = {}
     for task in tqdm(tasks):
-        se = senteval.engine.SE(params, batcher, prepare)
+        se = engine.SE(params, batcher, prepare)
         result = se.eval(task)
         results[task] = result
 

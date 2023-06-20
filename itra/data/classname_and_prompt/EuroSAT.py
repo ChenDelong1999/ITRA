@@ -1,28 +1,21 @@
-# classes = [
-#     'forest',
-#     'permanent crop land',
-#     'residential buildings or homes or apartments',
-#     'river',
-#     'pasture land',
-#     'lake or sea',
-#     'brushland or shrubland',
-#     'annual crop land',
-#     'industrial buildings or commercial buildings',
-#     'highway or road',
-# ]
-# ['River', 'AnnualCrop', 'HerbaceousVegetation', 'Industrial', 'Residential', 'Highway', 'Pasture', 'Forest', 'SeaLake', 'PermanentCrop']
-classes = [
-    'river',
-    'annual crop land',
-    'brushland or shrubland',
-    'industrial buildings or commercial buildings',
-    'residential buildings or homes or apartments',
-    'highway or road',
-    'pasture land',
-    'forest',
-    'lake or sea',
-    'permanent crop land',
-]
+new_classes = {
+    'Forest':'forest',
+    'PermanentCrop':'permanent crop land',
+    'Residential':'residential buildings or homes or apartments',
+    'River':'river',
+    'Pasture':'pasture land',
+    'SeaLake':'lake or sea',
+    'HerbaceousVegetation':'brushland or shrubland',
+    'AnnualCrop':'annual crop land',
+    'Industrial':'industrial buildings or commercial buildings',
+    'Highway':'highway or road'
+
+}
+# classes 对应文本提示中的类名
+# file_class_name 对应数据文件的类名
+classes = list(new_classes.values())
+file_class_names = list(new_classes.keys())
+
 templates = [
     'a centered satellite photo of {}.',
     'a centered satellite photo of a {}.',

@@ -1,0 +1,72 @@
+# GPUS: (0,)
+
+INPUT:
+  MEAN: [0.48145466, 0.4578275, 0.40821073]
+  STD: [0.26862954, 0.26130258, 0.27577711]
+
+MODEL:
+  NAME: 'ConvNext-Large-D'
+  NUM_PARAMS_IN_M: 351.77
+  AUTHOR: 'timm'
+  PRETRAINED_DATA: 'LAION-2B'
+
+  SPEC:
+    VISION:
+      ##### parameters can be modified in the visual model ######
+      IMAGE_MODEL: "convnext_large_d"
+      PRETRAINED_TEXT_MODEL: true
+      IMAGE_MODEL_BUILDER: 'openclip'
+      IMAGE_MODEL_TAG: 'laion2b_s26b_b102k_augreg'
+      IMAGE_HEAD_N_LAYERS: 0
+      LOCK_IMAGE_MODEL: false
+      LOCK_IMAGE_PARTIAL: ''
+      IMAGE_RESOLUTION: 256
+      ###########################################################
+      timm_pool: ""
+      timm_proj: "mlp"
+      timm_drop: 0.0
+      timm_drop_path: 0.1
+
+    TEXT:
+      TEXT_MODEL: "convnext_large_d"
+      PRETRAINED_IMAGE_MODEL: true
+      TEXT_MODEL_BUILDER: 'openclip'
+      TEXT_MODEL_TAG: 'laion2b_s26b_b102k_augreg'
+      TEXT_HEAD_N_LAYERS: 0
+      LOCK_TEXT_MODEL: false
+      LOCK_TEXT_PARTIAL: ''
+      TEXT_POOLER: 'cls'
+      PROMPT: false
+      N_PROMPT: 4
+      adapter: null
+      MAX_SEQ_LENGTH: 77
+
+      VOCAB_SIZE: 49408
+      WIDTH: 768
+      HEADS: 12
+      LAYERS: 16
+
+
+
+    AGNOSITC_CONFIG:
+      JOINT_PROJECTION_DIM: -1
+      CACHE_DIR: 'cache/weights'
+      CACHE_TEACHER: null
+
+TEST:
+  BATCH_SIZE_PER_GPU: 128
+  MODEL_FILE: ''
+
+TRAIN:
+  BATCH_SIZE_PER_GPU: 64
+  BEGIN_EPOCH: 0
+  END_EPOCH: 10
+  EXTRA_FINAL_TRAIN_EPOCH: 40
+  OPTIMIZER: sgd
+  WD: 0.
+  MOMENTUM: 0.9
+  NESTEROV: false
+  SHUFFLE: true
+  LR_SCHEDULER:
+    METHOD: 'WarmupCosine'
+    WARMUP_EPOCH: 5

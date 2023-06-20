@@ -16,7 +16,7 @@ from __future__ import absolute_import, division, unicode_literals
 
 import logging
 import numpy as np
-from senteval.tools.classifier import MLP
+from evaluation.SentEval.senteval.tools.classifier import MLP
 
 import sklearn
 assert(sklearn.__version__ >= "0.18.0"), \
